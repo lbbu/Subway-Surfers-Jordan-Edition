@@ -1,11 +1,11 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-//using DG.Tweening;
+using DG.Tweening;
 
 public class PlayerMovements : MonoBehaviour
 {
-    /*
+    
     [SerializeField] float forceValue = 10;
     //[SerializeField] GameTutorial gameTutorial;
 
@@ -20,10 +20,10 @@ public class PlayerMovements : MonoBehaviour
     Rigidbody rb;
     Swipe swipeControls;
 
-    */
+    
     public static bool isAllowToMove;
 
-    /*
+    
 
     float currentXPos, middleXPos, rightXPos, leftXPos;
 
@@ -37,10 +37,9 @@ public class PlayerMovements : MonoBehaviour
     void Start()
     {
         // reset enemy and ground speed when u start the game
-        GroundMovements.groundSpeed = 10f;
-        Enemy.enemySpeed = 15f;
+        //GroundMovements.groundSpeed = 10f;
 
-
+        isAllowToMove = true;
 
         currentXPos = transform.position.x;
         middleXPos = 0f;
@@ -81,7 +80,6 @@ public class PlayerMovements : MonoBehaviour
             transform.DOMoveX(rightXPos, 0.5f, false);
             currentXPos = rightXPos;
         }
-        gameTutorial.HideRightArrow();
 
     }
 
@@ -101,7 +99,6 @@ public class PlayerMovements : MonoBehaviour
             transform.DOMoveX(leftXPos, 0.5f, false);
             currentXPos = leftXPos;
         }
-        gameTutorial.HideRightArrow();
 
     }
 
@@ -109,7 +106,6 @@ public class PlayerMovements : MonoBehaviour
     {
         if (swipeControls.SwipeDown)
         {
-            gameTutorial.HideDownArrow();
             StartCoroutine(SlideDown());
         }
     }
@@ -131,6 +127,6 @@ public class PlayerMovements : MonoBehaviour
 
     }
 
-    */
+    
 
 }

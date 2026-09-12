@@ -1,10 +1,9 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class Jump : MonoBehaviour
 {
-
     public float jumpHeight = 2f;
     public float timeToJumpApex = 0.4f;
 
@@ -12,12 +11,9 @@ public class Jump : MonoBehaviour
     private float jumpVelocity;
     private float velocityY;
     private Rigidbody rb;
-
-
-
+    private bool jumpRequested; // متغير لالتقاط الإدخال
 
     Swipe swipeControls;
-
 
     [Header("Ground Check")]
     [SerializeField] Transform groundCheckPos;
@@ -29,6 +25,7 @@ public class Jump : MonoBehaviour
     {
         swipeControls = GetComponent<Swipe>();
         rb = GetComponent<Rigidbody>();
+        rb.useGravity = false; // إيقاف جاذبية يونيتي لمنع التعارض
     }
 
     private void Start()
@@ -36,59 +33,59 @@ public class Jump : MonoBehaviour
         CalculateGravityAndJumpVelocity();
     }
 
+    private void Update()
+    {
+        if (!PlayerMovements.isAllowToMove) { return; }
 
+        // التقاط الإدخال في Update لمنع ضياع الفريم
+        if (swipeControls.SwipeUp)
+        {
+            jumpRequested = true;
+        }
+    }
 
     private void FixedUpdate()
     {
-
         if (!PlayerMovements.isAllowToMove) { return; }
 
         isGrounded = Physics.Raycast(groundCheckPos.position, Vector3.down, playerHight * 0.5f + 0.01f, whatIsGround);
 
-        ApplyGravity();
-        if (!isGrounded) { return; }
-        //rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionZ
-        // | RigidbodyConstraints.FreezeRotation;
-        if (swipeControls.SwipeUp)
+        // تصفير السرعة العمودية عند ملامسة الأرض
+        if (isGrounded && velocityY < 0)
         {
-            //rb.constraints &= ~RigidbodyConstraints.FreezePositionY;
-            HandleJumpInput();
-
+            velocityY = 0;
         }
 
+        ApplyGravity();
 
-
-
+        // تنفيذ القفز
+        if (isGrounded && jumpRequested)
+        {
+            HandleJumpInput();
+            jumpRequested = false;
+        }
+        else if (isGrounded)
+        {
+            jumpRequested = false; // إلغاء الطلب إذا مر الوقت وهو على الأرض
+        }
     }
 
     private void CalculateGravityAndJumpVelocity()
     {
-
-
         gravity = -(2 * jumpHeight) / Mathf.Pow(timeToJumpApex, 2);
         jumpVelocity = Mathf.Abs(gravity) * timeToJumpApex;
     }
 
     private void HandleJumpInput()
     {
-        /*
-        if (Input.GetKeyDown(KeyCode.Space) && rb.velocity.y == 0)
-        {
-            velocityY = jumpVelocity;
-            rb.velocity = new Vector3(rb.velocity.x, velocityY, rb.velocity.z);
-        }
-        */
-
         velocityY = jumpVelocity;
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, velocityY, rb.linearVelocity.z);
     }
 
     private void ApplyGravity()
     {
-        if (gameObject.transform.position.y <= 0.51f) { return; }
+        if (isGrounded) { return; } // الاعتماد على Raycast بدلاً من الارتفاع الثابت
         velocityY += gravity * Time.deltaTime;
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, velocityY, rb.linearVelocity.z);
     }
-
-
 }
