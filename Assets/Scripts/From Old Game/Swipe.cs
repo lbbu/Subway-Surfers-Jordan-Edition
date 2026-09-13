@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -5,21 +6,26 @@ using UnityEngine;
 public class Swipe : MonoBehaviour
 {
 
-    private bool tap, swipeUp, swipeDown, swipeLeft, swipeRight;
+    public event EventHandler OnSwipeUp, OnSwipeDown, OnSwipeLeft, OnSwipeRight;
     private bool isDraging = false;
     private Vector2 startTouch, swipeDelta;
+
+    public static Swipe Instance;
+
+    private void Awake()
+    {
+        Instance = this;
+    }
 
     private void Update()
     {
 
-        tap = swipeDown = swipeLeft = swipeRight = swipeUp = false;
 
         if (Input.touches.Length > 0)
         {
 
             if (Input.touches[0].phase == TouchPhase.Began)
             {
-                tap = true;
                 isDraging = true;
 
                 startTouch = Input.touches[0].position;
@@ -62,11 +68,11 @@ public class Swipe : MonoBehaviour
                 // left or right
                 if (x < 0)
                 {
-                    swipeLeft = true;
+                    OnSwipeLeft?.Invoke(this, EventArgs.Empty);
                 }
                 else
                 {
-                    swipeRight = true;
+                    OnSwipeRight?.Invoke(this, EventArgs.Empty);
                 }
 
             }
@@ -75,11 +81,11 @@ public class Swipe : MonoBehaviour
                 //Up or Down
                 if (y < 0)
                 {
-                    swipeDown = true;
+                    OnSwipeDown?.Invoke(this, EventArgs.Empty);
                 }
                 else
                 {
-                    swipeUp = true;
+                    OnSwipeUp?.Invoke(this, EventArgs.Empty);
                 }
 
             }
@@ -102,14 +108,6 @@ public class Swipe : MonoBehaviour
 
 
     public Vector2 StartTouch { get { return startTouch; } }
-    public bool Tap { get { return tap; } }
-    public bool SwipeUp { get { return swipeUp; } }
-    public bool SwipeDown { get { return swipeDown; } }
-    public bool SwipeLeft { get { return swipeLeft; } }
-    public bool SwipeRight { get { return swipeRight; } }
-
-
-
 
 
 }

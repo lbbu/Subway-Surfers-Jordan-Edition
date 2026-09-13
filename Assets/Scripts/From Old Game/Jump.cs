@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -13,7 +14,6 @@ public class Jump : MonoBehaviour
     private Rigidbody rb;
     private bool jumpRequested; // متغير لالتقاط الإدخال
 
-    Swipe swipeControls;
 
     [Header("Ground Check")]
     [SerializeField] Transform groundCheckPos;
@@ -23,7 +23,6 @@ public class Jump : MonoBehaviour
 
     private void Awake()
     {
-        swipeControls = GetComponent<Swipe>();
         rb = GetComponent<Rigidbody>();
         rb.useGravity = false; // إيقاف جاذبية يونيتي لمنع التعارض
     }
@@ -31,17 +30,20 @@ public class Jump : MonoBehaviour
     private void Start()
     {
         CalculateGravityAndJumpVelocity();
+
+        Swipe.Instance.OnSwipeUp += HandleSwipeUp;
+
+    }
+
+    private void HandleSwipeUp(object sender, EventArgs e)
+    {
+        jumpRequested = true;
     }
 
     private void Update()
     {
         if (!PlayerMovements.isAllowToMove) { return; }
-
-        // التقاط الإدخال في Update لمنع ضياع الفريم
-        if (swipeControls.SwipeUp)
-        {
-            jumpRequested = true;
-        }
+        
     }
 
     private void FixedUpdate()

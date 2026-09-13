@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
+using System;
 
 public class PlayerMovements : MonoBehaviour
 {
@@ -13,12 +14,10 @@ public class PlayerMovements : MonoBehaviour
     [SerializeField] Transform groundCheckPos;
     [SerializeField] float playerHight;
     [SerializeField] LayerMask whatIsGround;
-    bool isGrounded;
 
 
 
     Rigidbody rb;
-    Swipe swipeControls;
 
     
     public static bool isAllowToMove;
@@ -30,7 +29,6 @@ public class PlayerMovements : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
-        swipeControls = GetComponent<Swipe>();
     }
 
     // Start is called before the first frame update
@@ -46,29 +44,14 @@ public class PlayerMovements : MonoBehaviour
         rightXPos = 4f;
         leftXPos = -4f;
 
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-
-        if (!isAllowToMove) { return; }
-
-        //InputMoveForTest();
-
-
-        MoveRight();
-        MoveLeft();
-        MoveDown();
-
-
+        Swipe.Instance.OnSwipeDown += HandleSwipeDown;
+        Swipe.Instance.OnSwipeLeft += HandleSwipeLeft;
+        Swipe.Instance.OnSwipeRight += HandleSwipeRight;
 
     }
 
-
-    void MoveRight()
+    private void HandleSwipeRight(object sender, EventArgs e)
     {
-        if (!swipeControls.SwipeRight) { return; }
 
         if (currentXPos < middleXPos)
         {
@@ -80,14 +63,10 @@ public class PlayerMovements : MonoBehaviour
             transform.DOMoveX(rightXPos, 0.5f, false);
             currentXPos = rightXPos;
         }
-
     }
 
-
-    void MoveLeft()
+    private void HandleSwipeLeft(object sender, EventArgs e)
     {
-
-        if (!swipeControls.SwipeLeft) { return; }
 
         if (currentXPos > middleXPos)
         {
@@ -99,17 +78,26 @@ public class PlayerMovements : MonoBehaviour
             transform.DOMoveX(leftXPos, 0.5f, false);
             currentXPos = leftXPos;
         }
-
     }
 
-    void MoveDown()
+    private void HandleSwipeDown(object sender, EventArgs e)
     {
-        if (swipeControls.SwipeDown)
-        {
+        
             StartCoroutine(SlideDown());
-        }
+        
     }
 
+    // Update is called once per frame
+    void Update()
+    {
+
+        if (!isAllowToMove) { return; }
+
+
+    }
+
+
+    
     IEnumerator SlideDown()
     {
         rb.freezeRotation = false;
