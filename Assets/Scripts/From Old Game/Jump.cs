@@ -26,6 +26,9 @@ public class Jump : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+
+        if(!playerAnimator)
+        playerAnimator = GetComponent<Animator>();
         rb.useGravity = false; // إيقاف جاذبية يونيتي لمنع التعارض
     }
 
