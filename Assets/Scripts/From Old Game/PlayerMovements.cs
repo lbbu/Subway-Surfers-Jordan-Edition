@@ -1,13 +1,12 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
+using System;
 
 public class PlayerMovements : MonoBehaviour
 {
     [SerializeField] float forceValue = 10;
-    //[SerializeField] GameTutorial gameTutorial;
 
     [Header("Ground Check")]
     [SerializeField] Transform groundCheckPos;
@@ -15,15 +14,15 @@ public class PlayerMovements : MonoBehaviour
     [SerializeField] LayerMask whatIsGround;
 
     [Header("Slide Settings")]
-    [SerializeField] float slideDistance = 5f;   // مسافة الانزلاق للأمام
-    [SerializeField] float slideDuration = 0.8f;  // مدة الانزلاق بالثواني
+    [SerializeField] private Animator playerAnimator;
+    [SerializeField] private float fallDuration = 0.15f;
+    [SerializeField] private float slideDuration = 0.8f;
 
     Rigidbody rb;
-
     public static bool isAllowToMove;
+    private bool isSliding = false;
 
     float currentXPos, middleXPos, rightXPos, leftXPos;
-    bool isSliding = false;
 
     private void Awake()
     {
@@ -39,6 +38,7 @@ public class PlayerMovements : MonoBehaviour
         rightXPos = 4f;
         leftXPos = -4f;
 
+        // الاشتراك بأحداث السحب
         if (Swipe.Instance != null)
         {
             Swipe.Instance.OnSwipeDown += HandleSwipeDown;
@@ -49,6 +49,7 @@ public class PlayerMovements : MonoBehaviour
 
     private void OnDestroy()
     {
+        // ممارسة برمجية أساسية: فك الارتباط بالأحداث لتجنب تسريب الذاكرة (Memory Leaks)
         if (Swipe.Instance != null)
         {
             Swipe.Instance.OnSwipeDown -= HandleSwipeDown;
@@ -59,6 +60,7 @@ public class PlayerMovements : MonoBehaviour
 
     private void HandleSwipeRight(object sender, EventArgs e)
     {
+        // إزالة شرط isSliding للسماح بالحركة أثناء الانزلاق
         if (!isAllowToMove) return;
 
         if (currentXPos < middleXPos)
@@ -75,6 +77,7 @@ public class PlayerMovements : MonoBehaviour
 
     private void HandleSwipeLeft(object sender, EventArgs e)
     {
+        // إزالة شرط isSliding للسماح بالحركة أثناء الانزلاق
         if (!isAllowToMove) return;
 
         if (currentXPos > middleXPos)
@@ -91,8 +94,8 @@ public class PlayerMovements : MonoBehaviour
 
     private void HandleSwipeDown(object sender, EventArgs e)
     {
+        // إبقاء الشرط هنا لمنع تكرار الانزلاق أثناء الانزلاق الحالي
         if (!isAllowToMove || isSliding) return;
-
         StartCoroutine(SlideDown());
     }
 
@@ -104,31 +107,38 @@ public class PlayerMovements : MonoBehaviour
     IEnumerator SlideDown()
     {
         isSliding = true;
-        rb.freezeRotation = false;
 
-        // حفظ الدوران الأصلي بالكامل لاسترجاعه بدقة بعد الانتهاء
-        Quaternion originalRotation = transform.rotation;
-
-        // 1. تدوير اللاعب للأمام بالنسبة لاتجاهه المحلي الحالي (Local Rotation)
-        transform.DORotateQuaternion(originalRotation * Quaternion.Euler(-90, 0, 0), 0.2f);
-
-        // 2. خفض اللاعب باتجاه الأرض
-        if (Physics.Raycast(groundCheckPos.position, Vector3.down, out RaycastHit hitInfo, playerHight * 4f, whatIsGround))
+        // 1. تشغيل الأنيميشن بدلاً من تدوير المجسم
+        if (playerAnimator != null)
         {
-            float groundYPos = hitInfo.point.y;
-            transform.DOMoveY(groundYPos + 0.5f, 0.15f, false);
+            playerAnimator.ResetTrigger("Run");
+            playerAnimator.ResetTrigger("Jump");
+            playerAnimator.SetTrigger("Slide");
         }
 
-        // 3. دفع اللاعب باتجاه وجهه الأمامي الحالي وليس فقط محور Z العالمي
-        Vector3 targetPos = transform.position + transform.forward * slideDistance;
-        transform.DOMoveZ(targetPos.z, slideDuration).SetEase(Ease.OutQuad);
+        // 2. الهبوط السريع للأرض في حال كان اللاعب يقفز
+        if (Physics.Raycast(groundCheckPos.position, Vector3.down, out RaycastHit hitInfo, 10f, whatIsGround))
+        {
+            float groundYPos = hitInfo.point.y;
+            float targetYPosition = groundYPos + (playerHight * 0.5f);
 
-        // الانتظار حتى تنتهي مدة الانزلاق
+            // إذا كان اللاعب أعلى من الأرض بمسافة ملحوظة، ننزله بسرعة
+            if (transform.position.y > targetYPosition + 0.1f)
+            {
+                transform.DOMoveY(targetYPosition, fallDuration).SetEase(Ease.OutCubic);
+            }
+        }
+
+        // الانتظار حتى ينتهي الأنيميشن
         yield return new WaitForSeconds(slideDuration);
 
-        // 4. إرجاع الدوران والدوران الثابت للـ Rigidbody
-        transform.DORotateQuaternion(originalRotation, 0.2f);
-        rb.freezeRotation = true;
         isSliding = false;
+    }
+
+    public void GoBackToRunning()
+    {
+        playerAnimator.SetTrigger("Run");
+        playerAnimator.ResetTrigger("Slide");
+        playerAnimator.ResetTrigger("Jump");
     }
 }

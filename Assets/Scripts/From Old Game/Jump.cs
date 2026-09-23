@@ -83,6 +83,7 @@ public class Jump : MonoBehaviour
     private void HandleJumpInput()
     {
         playerAnimator.ResetTrigger("Run");
+        playerAnimator.ResetTrigger("Slide");
         playerAnimator.SetTrigger("Jump");
         velocityY = jumpVelocity;
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, velocityY, rb.linearVelocity.z);
@@ -98,6 +99,9 @@ public class Jump : MonoBehaviour
     public void GoBackToRunning()
     {
         playerAnimator.SetTrigger("Run");
+        playerAnimator.ResetTrigger("Slide");
+        playerAnimator.ResetTrigger("Jump");
+
     }
 
 }
