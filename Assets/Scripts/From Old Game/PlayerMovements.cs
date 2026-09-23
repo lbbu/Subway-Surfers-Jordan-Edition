@@ -18,15 +18,35 @@ public class PlayerMovements : MonoBehaviour
     [SerializeField] private float fallDuration = 0.15f;
     [SerializeField] private float slideDuration = 0.8f;
 
+    [Header("Collider Settings")]
+    [SerializeField] private CapsuleCollider playerCollider;
+    [SerializeField] private float slideColliderHeight = 1f; // ارتفاع المصادم أثناء الانزلاق
+    [SerializeField] private Vector3 slideColliderCenter = new Vector3(0, 0.5f, 0); // مركز المصادم أثناء الانزلاق
+
     Rigidbody rb;
     public static bool isAllowToMove;
     private bool isSliding = false;
 
     float currentXPos, middleXPos, rightXPos, leftXPos;
 
+    // متغيرات لحفظ الأبعاد الأصلية للمصادم
+    private float originalColliderHeight;
+    private Vector3 originalColliderCenter;
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+
+        // إذا لم تقم بربط المصادم من الـ Inspector، سيبحث عنه الكود
+        if (playerCollider == null)
+            playerCollider = GetComponent<CapsuleCollider>();
+
+        // حفظ الأبعاد الأصلية لاسترجاعها بعد الانزلاق
+        if (playerCollider != null)
+        {
+            originalColliderHeight = playerCollider.height;
+            originalColliderCenter = playerCollider.center;
+        }
     }
 
     void Start()
@@ -38,7 +58,6 @@ public class PlayerMovements : MonoBehaviour
         rightXPos = 4f;
         leftXPos = -4f;
 
-        // الاشتراك بأحداث السحب
         if (Swipe.Instance != null)
         {
             Swipe.Instance.OnSwipeDown += HandleSwipeDown;
@@ -49,7 +68,6 @@ public class PlayerMovements : MonoBehaviour
 
     private void OnDestroy()
     {
-        // ممارسة برمجية أساسية: فك الارتباط بالأحداث لتجنب تسريب الذاكرة (Memory Leaks)
         if (Swipe.Instance != null)
         {
             Swipe.Instance.OnSwipeDown -= HandleSwipeDown;
@@ -60,7 +78,6 @@ public class PlayerMovements : MonoBehaviour
 
     private void HandleSwipeRight(object sender, EventArgs e)
     {
-        // إزالة شرط isSliding للسماح بالحركة أثناء الانزلاق
         if (!isAllowToMove) return;
 
         if (currentXPos < middleXPos)
@@ -77,7 +94,6 @@ public class PlayerMovements : MonoBehaviour
 
     private void HandleSwipeLeft(object sender, EventArgs e)
     {
-        // إزالة شرط isSliding للسماح بالحركة أثناء الانزلاق
         if (!isAllowToMove) return;
 
         if (currentXPos > middleXPos)
@@ -94,7 +110,6 @@ public class PlayerMovements : MonoBehaviour
 
     private void HandleSwipeDown(object sender, EventArgs e)
     {
-        // إبقاء الشرط هنا لمنع تكرار الانزلاق أثناء الانزلاق الحالي
         if (!isAllowToMove || isSliding) return;
         StartCoroutine(SlideDown());
     }
@@ -108,7 +123,6 @@ public class PlayerMovements : MonoBehaviour
     {
         isSliding = true;
 
-        // 1. تشغيل الأنيميشن بدلاً من تدوير المجسم
         if (playerAnimator != null)
         {
             playerAnimator.ResetTrigger("Run");
@@ -116,21 +130,32 @@ public class PlayerMovements : MonoBehaviour
             playerAnimator.SetTrigger("Slide");
         }
 
-        // 2. الهبوط السريع للأرض في حال كان اللاعب يقفز
+        // تغيير أبعاد المصادم ليتماشى مع حركة الانزلاق
+        if (playerCollider != null)
+        {
+            playerCollider.height = slideColliderHeight;
+            playerCollider.center = slideColliderCenter;
+        }
+
         if (Physics.Raycast(groundCheckPos.position, Vector3.down, out RaycastHit hitInfo, 10f, whatIsGround))
         {
             float groundYPos = hitInfo.point.y;
             float targetYPosition = groundYPos + (playerHight * 0.5f);
 
-            // إذا كان اللاعب أعلى من الأرض بمسافة ملحوظة، ننزله بسرعة
             if (transform.position.y > targetYPosition + 0.1f)
             {
                 transform.DOMoveY(targetYPosition, fallDuration).SetEase(Ease.OutCubic);
             }
         }
 
-        // الانتظار حتى ينتهي الأنيميشن
         yield return new WaitForSeconds(slideDuration);
+
+        // إرجاع المصادم لشكله الأصلي بعد انتهاء الانزلاق
+        if (playerCollider != null)
+        {
+            playerCollider.height = originalColliderHeight;
+            playerCollider.center = originalColliderCenter;
+        }
 
         isSliding = false;
     }
@@ -140,5 +165,12 @@ public class PlayerMovements : MonoBehaviour
         playerAnimator.SetTrigger("Run");
         playerAnimator.ResetTrigger("Slide");
         playerAnimator.ResetTrigger("Jump");
+
+        // تأمين إضافي لإرجاع المصادم في حال تم قطع حركة الانزلاق قسرياً
+        if (playerCollider != null)
+        {
+            playerCollider.height = originalColliderHeight;
+            playerCollider.center = originalColliderCenter;
+        }
     }
 }

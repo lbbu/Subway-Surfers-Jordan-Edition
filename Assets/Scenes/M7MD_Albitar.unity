@@ -602,6 +602,9 @@ MonoBehaviour:
   playerAnimator: {fileID: 610961211}
   fallDuration: 0.15
   slideDuration: 0.8
+  playerCollider: {fileID: 610961210}
+  slideColliderHeight: 1
+  slideColliderCenter: {x: 0, y: 0.5, z: 0}
 --- !u!4 &610961208
 Transform:
   m_ObjectHideFlags: 0
