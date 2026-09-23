@@ -1,12 +1,11 @@
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
-using System;
 
 public class PlayerMovements : MonoBehaviour
 {
-    
     [SerializeField] float forceValue = 10;
     //[SerializeField] GameTutorial gameTutorial;
 
@@ -15,28 +14,24 @@ public class PlayerMovements : MonoBehaviour
     [SerializeField] float playerHight;
     [SerializeField] LayerMask whatIsGround;
 
-
+    [Header("Slide Settings")]
+    [SerializeField] float slideDistance = 5f;   // مسافة الانزلاق للأمام
+    [SerializeField] float slideDuration = 0.8f;  // مدة الانزلاق بالثواني
 
     Rigidbody rb;
 
-    
     public static bool isAllowToMove;
 
-    
-
     float currentXPos, middleXPos, rightXPos, leftXPos;
+    bool isSliding = false;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
     }
 
-    // Start is called before the first frame update
     void Start()
     {
-        // reset enemy and ground speed when u start the game
-        //GroundMovements.groundSpeed = 10f;
-
         isAllowToMove = true;
 
         currentXPos = transform.position.x;
@@ -44,14 +39,27 @@ public class PlayerMovements : MonoBehaviour
         rightXPos = 4f;
         leftXPos = -4f;
 
-        Swipe.Instance.OnSwipeDown += HandleSwipeDown;
-        Swipe.Instance.OnSwipeLeft += HandleSwipeLeft;
-        Swipe.Instance.OnSwipeRight += HandleSwipeRight;
+        if (Swipe.Instance != null)
+        {
+            Swipe.Instance.OnSwipeDown += HandleSwipeDown;
+            Swipe.Instance.OnSwipeLeft += HandleSwipeLeft;
+            Swipe.Instance.OnSwipeRight += HandleSwipeRight;
+        }
+    }
 
+    private void OnDestroy()
+    {
+        if (Swipe.Instance != null)
+        {
+            Swipe.Instance.OnSwipeDown -= HandleSwipeDown;
+            Swipe.Instance.OnSwipeLeft -= HandleSwipeLeft;
+            Swipe.Instance.OnSwipeRight -= HandleSwipeRight;
+        }
     }
 
     private void HandleSwipeRight(object sender, EventArgs e)
     {
+        if (!isAllowToMove) return;
 
         if (currentXPos < middleXPos)
         {
@@ -67,6 +75,7 @@ public class PlayerMovements : MonoBehaviour
 
     private void HandleSwipeLeft(object sender, EventArgs e)
     {
+        if (!isAllowToMove) return;
 
         if (currentXPos > middleXPos)
         {
@@ -82,39 +91,44 @@ public class PlayerMovements : MonoBehaviour
 
     private void HandleSwipeDown(object sender, EventArgs e)
     {
-        
-            StartCoroutine(SlideDown());
-        
+        if (!isAllowToMove || isSliding) return;
+
+        StartCoroutine(SlideDown());
     }
 
-    // Update is called once per frame
     void Update()
     {
-
         if (!isAllowToMove) { return; }
-
-
     }
 
-
-    
     IEnumerator SlideDown()
     {
+        isSliding = true;
         rb.freezeRotation = false;
-        transform.DORotate(new Vector3(-90, 0, 0), 0.2f, RotateMode.Fast);
 
-        Physics.Raycast(groundCheckPos.position, Vector3.down, out RaycastHit hitInfo,
-            playerHight * 4f, whatIsGround);
-        float groundYPos = hitInfo.transform.position.y;
-        transform.DOMoveY(groundYPos + 0.5f, transform.position.y * 0.1f, false);
+        // حفظ الدوران الأصلي بالكامل لاسترجاعه بدقة بعد الانتهاء
+        Quaternion originalRotation = transform.rotation;
 
-        yield return new WaitForSecondsRealtime(0.8f);
+        // 1. تدوير اللاعب للأمام بالنسبة لاتجاهه المحلي الحالي (Local Rotation)
+        transform.DORotateQuaternion(originalRotation * Quaternion.Euler(-90, 0, 0), 0.2f);
 
-        transform.DORotate(new Vector3(0, 0, 0), 0.2f, RotateMode.Fast);
+        // 2. خفض اللاعب باتجاه الأرض
+        if (Physics.Raycast(groundCheckPos.position, Vector3.down, out RaycastHit hitInfo, playerHight * 4f, whatIsGround))
+        {
+            float groundYPos = hitInfo.point.y;
+            transform.DOMoveY(groundYPos + 0.5f, 0.15f, false);
+        }
+
+        // 3. دفع اللاعب باتجاه وجهه الأمامي الحالي وليس فقط محور Z العالمي
+        Vector3 targetPos = transform.position + transform.forward * slideDistance;
+        transform.DOMoveZ(targetPos.z, slideDuration).SetEase(Ease.OutQuad);
+
+        // الانتظار حتى تنتهي مدة الانزلاق
+        yield return new WaitForSeconds(slideDuration);
+
+        // 4. إرجاع الدوران والدوران الثابت للـ Rigidbody
+        transform.DORotateQuaternion(originalRotation, 0.2f);
         rb.freezeRotation = true;
-
+        isSliding = false;
     }
-
-    
-
 }
