@@ -14,6 +14,8 @@ public class Jump : MonoBehaviour
     private Rigidbody rb;
     private bool jumpRequested; // متغير لالتقاط الإدخال
 
+    [SerializeField] private Animator playerAnimator;
+
 
     [Header("Ground Check")]
     [SerializeField] Transform groundCheckPos;
@@ -24,6 +26,9 @@ public class Jump : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+
+        if(!playerAnimator)
+        playerAnimator = GetComponent<Animator>();
         rb.useGravity = false; // إيقاف جاذبية يونيتي لمنع التعارض
     }
 
@@ -42,7 +47,6 @@ public class Jump : MonoBehaviour
 
     private void Update()
     {
-        if (!PlayerMovements.isAllowToMove) { return; }
         
     }
 
@@ -69,6 +73,7 @@ public class Jump : MonoBehaviour
         else if (isGrounded)
         {
             jumpRequested = false; // إلغاء الطلب إذا مر الوقت وهو على الأرض
+            playerAnimator.ResetTrigger("Jump");
         }
     }
 
@@ -80,6 +85,9 @@ public class Jump : MonoBehaviour
 
     private void HandleJumpInput()
     {
+        playerAnimator.ResetTrigger("Run");
+        playerAnimator.ResetTrigger("Slide");
+        playerAnimator.SetTrigger("Jump");
         velocityY = jumpVelocity;
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, velocityY, rb.linearVelocity.z);
     }
@@ -90,4 +98,13 @@ public class Jump : MonoBehaviour
         velocityY += gravity * Time.deltaTime;
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, velocityY, rb.linearVelocity.z);
     }
+
+    public void GoBackToRunning()
+    {
+        playerAnimator.SetTrigger("Run");
+        playerAnimator.ResetTrigger("Slide");
+        playerAnimator.ResetTrigger("Jump");
+
+    }
+
 }
