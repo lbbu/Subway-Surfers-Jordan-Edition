@@ -8,7 +8,7 @@ public class Swipe : MonoBehaviour
     public event EventHandler OnSwipeUp, OnSwipeDown, OnSwipeLeft, OnSwipeRight;
     private bool isDraging = false;
     private Vector2 startTouch, swipeDelta;
-
+    [SerializeField] private float deadZone = 125f;
     public static Swipe Instance;
 
     private void Awake()
