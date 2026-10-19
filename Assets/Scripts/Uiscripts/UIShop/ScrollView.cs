@@ -4,7 +4,7 @@ using UnityEngine.UI;
 public class ScrollView : MonoBehaviour
 {
   [SerializeField] private Button[] buttons;
-  private Image[] images;
+
  private Character charBT;
 
 
