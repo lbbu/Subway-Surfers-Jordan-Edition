@@ -123,12 +123,14 @@ public class PlayerMovements : MonoBehaviour
     //لتفادي تفعيل اثنتين سوياا و لتفادي الاخطاء
     private Tween laneTween;
     private bool hitObsticle = false;
+    private bool stubmle =false;
     private void ChangeLane(int direction)
     {
         if (!isAllowToMove) return;
+        if(stubmle) return;
         int targetLane = Mathf.Clamp(currentLane + direction, 0, laneX.Length - 1);
         float laneGap = Mathf.Abs(laneX[targetLane] - laneX[currentLane]);
-
+        laneTween?.Kill();
         Vector3 rayDic = direction == 1 ? Vector3.right : Vector3.left;
         hitObsticle = Physics.Raycast(checkPos.position, rayDic, laneGap, whatIsGround);
         Vector3 end = new Vector3(rayDic.x * laneGap, rayDic.y, rayDic.z);
@@ -140,19 +142,26 @@ public class PlayerMovements : MonoBehaviour
             {
                 Debug.Log($"Hit {hit.collider.gameObject.name} laneGap = {laneGap} distance {hit.distance}");
                 float distance = hit.distance;
-
+                stubmle = true;
                 Sequence seq = DOTween.Sequence();
-                // Hit seq
-                float difference = MathF.Abs(laneX[currentLane] - distance);
+                // الحساب الصحيح اولا احسب سرعة تغير الطريق ثم احسب المسافة و هكذا احصل على وقت اصح
+                // (باستعمال معادلة: (السرعة = المسافة *الزمن
                 float speed = laneGap / laneChangeDuration;
-                float timeDiff = difference / speed;
 
-                seq.Append(rb.DOMoveX(distance * direction, timeDiff)
+                float startX = rb.position.x;
+                float targetX = laneX[currentLane] + distance * direction;
+                float homeX = laneX[currentLane];
+
+                float outTime = Mathf.Abs(targetX - startX) / speed;
+                float backTime = Mathf.Abs(homeX - targetX) / speed;
+
+                seq.Append(rb.DOMoveX(targetX, outTime)
                               .SetEase(Ease.OutQuad)
                               .SetUpdate(UpdateType.Fixed))
-                    .Append(rb.DOMoveX(laneX[currentLane], timeDiff)
+                   .Append(rb.DOMoveX(homeX, backTime)
                               .SetEase(Ease.OutQuad)
-                              .SetUpdate(UpdateType.Fixed)); // .Join(اضافة احداث الاصطدام)
+                              .SetUpdate(UpdateType.Fixed))
+                   .OnComplete(() => stubmle = false);
 
             }
         }
@@ -162,7 +171,7 @@ public class PlayerMovements : MonoBehaviour
 
             currentLane = targetLane;
             //قتل التويين الحيوان لابعاد البقز
-            laneTween?.Kill();
+
             laneTween = rb.DOMoveX(laneX[currentLane], laneChangeDuration)
                           .SetEase(Ease.OutQuad)
                           .SetUpdate(UpdateType.Fixed);
