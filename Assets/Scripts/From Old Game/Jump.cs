@@ -13,7 +13,8 @@ public class Jump : MonoBehaviour
     private float velocityY;
     private Rigidbody rb;
     private bool jumpRequested; // متغير لالتقاط الإدخال
-
+    private bool jumping =false;
+    private bool leftGround = false;
     [SerializeField] private Animator playerAnimator;
 
 
@@ -42,6 +43,7 @@ public class Jump : MonoBehaviour
 
     private void HandleSwipeUp(object sender, EventArgs e)
     {
+        Debug.Log($"[HandleSwipeUp] Event Swipe UP Recived!");
         jumpRequested = true;
     }
 
@@ -61,19 +63,31 @@ public class Jump : MonoBehaviour
         {
             velocityY = 0;
         }
-
+        Debug.Log($"Method stops here");
         ApplyGravity();
+        Debug.Log($"jumpRequested = {jumpRequested}");
 
         // تنفيذ القفز
         if (isGrounded && jumpRequested)
         {
             HandleJumpInput();
-            jumpRequested = false;
-        }
-        else if (isGrounded)
-        {
             jumpRequested = false; // إلغاء الطلب إذا مر الوقت وهو على الأرض
-            playerAnimator.ResetTrigger("Jump");
+        }
+
+        if (jumping)
+        {
+            if (!isGrounded)
+            {
+                leftGround = true;
+            }
+            else if (leftGround && velocityY <= 0)
+            {
+                Debug.Log($"[jump] landed");
+                jumping = false;
+                leftGround = false;
+                isGrounded = true;
+                GoBackToRunning();
+            }
         }
     }
 
@@ -85,11 +99,13 @@ public class Jump : MonoBehaviour
 
     private void HandleJumpInput()
     {
+        Debug.Log($"[HandleJumpInput] JUMP!");
         playerAnimator.ResetTrigger("Run");
         playerAnimator.ResetTrigger("Slide");
         playerAnimator.SetTrigger("Jump");
         velocityY = jumpVelocity;
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, velocityY, rb.linearVelocity.z);
+        jumping = true;
     }
 
     private void ApplyGravity()

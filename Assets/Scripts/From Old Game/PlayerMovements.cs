@@ -100,39 +100,123 @@ public class PlayerMovements : MonoBehaviour
         }
     }
 
+
+    #region Updated Move L,R (AHMED)
+    // سبب الاستخدام للحرص على وضع قيمة معينة لضمان
+    // وجوداللاعب في تلك النقطة دون اي اخطاء
+    // و يمكن تغيرها عند تغير حجم الخريطة الاصلي
+
+    [SerializeField] private float[] laneX = { -4.5f, 0.5f, 4.5f }; // يمين ,منتصف ,يسار
+    [SerializeField] private float laneChangeDuration = 0.5f; // المدة التي يحتاجها ليصل لالخط او الطريق الثاني
+    [SerializeField] private Transform checkPos;
+    private int currentLane = 1; // ابدء بالنصف
+
     private void HandleSwipeRight(object sender, EventArgs e)
     {
-        if (!isAllowToMove) return;
-
-        // التحقق من موقع اللاعب الحالي ونقله للمسار الأيمن باستخدام rb.DOMoveX (لأداء فيزيائي أفضل)
-        if (currentXPos < middleXPos)
-        {
-            rb.DOMoveX(middleXPos, 0.5f, false);
-            currentXPos = middleXPos;
-        }
-        else if (currentXPos < rightXPos)
-        {
-            rb.DOMoveX(rightXPos, 0.5f, false);
-            currentXPos = rightXPos;
-        }
+        ChangeLane(1);
     }
 
     private void HandleSwipeLeft(object sender, EventArgs e)
     {
-        if (!isAllowToMove) return;
-
-        // التحقق من موقع اللاعب الحالي ونقله للمسار الأيسر باستخدام rb.DOMoveX
-        if (currentXPos > middleXPos)
-        {
-            rb.DOMoveX(middleXPos, 0.5f, false);
-            currentXPos = middleXPos;
-        }
-        else if (currentXPos > leftXPos)
-        {
-            rb.DOMoveX(leftXPos, 0.5f, false);
-            currentXPos = leftXPos;
-        }
+        ChangeLane(-1);
     }
+    //خزن التويين لازالته عند تفعيل العملية بسرعة
+    //لتفادي تفعيل اثنتين سوياا و لتفادي الاخطاء
+    private Tween laneTween;
+    private bool hitObsticle = false;
+    private bool stubmle =false;
+    private void ChangeLane(int direction)
+    {
+        if (!isAllowToMove) return;
+        if(stubmle) return;
+        int targetLane = Mathf.Clamp(currentLane + direction, 0, laneX.Length - 1);
+        float laneGap = Mathf.Abs(laneX[targetLane] - laneX[currentLane]);
+        laneTween?.Kill();
+        Vector3 rayDic = direction == 1 ? Vector3.right : Vector3.left;
+        hitObsticle = Physics.Raycast(checkPos.position, rayDic, laneGap, whatIsGround);
+        Vector3 end = new Vector3(rayDic.x * laneGap, rayDic.y, rayDic.z);
+        Debug.DrawLine(checkPos.position, end, Color.red);
+        if (hitObsticle)
+        {
+
+            if (Physics.Raycast(checkPos.position, rayDic, out RaycastHit hit, laneGap, whatIsGround))
+            {
+                Debug.Log($"Hit {hit.collider.gameObject.name} laneGap = {laneGap} distance {hit.distance}");
+                float distance = hit.distance;
+                stubmle = true;
+                Sequence seq = DOTween.Sequence();
+                // الحساب الصحيح اولا احسب سرعة تغير الطريق ثم احسب المسافة و هكذا احصل على وقت اصح
+                // (باستعمال معادلة: (السرعة = المسافة *الزمن
+                float speed = laneGap / laneChangeDuration;
+
+                float startX = rb.position.x;
+                float targetX = laneX[currentLane] + distance * direction;
+                float homeX = laneX[currentLane];
+
+                float outTime = Mathf.Abs(targetX - startX) / speed;
+                float backTime = Mathf.Abs(homeX - targetX) / speed;
+
+                seq.Append(rb.DOMoveX(targetX, outTime)
+                              .SetEase(Ease.OutQuad)
+                              .SetUpdate(UpdateType.Fixed))
+                   .Append(rb.DOMoveX(homeX, backTime)
+                              .SetEase(Ease.OutQuad)
+                              .SetUpdate(UpdateType.Fixed))
+                   .OnComplete(() => stubmle = false);
+
+            }
+        }
+        else
+        {
+            if (targetLane == currentLane) return;
+
+            currentLane = targetLane;
+            //قتل التويين الحيوان لابعاد البقز
+
+            laneTween = rb.DOMoveX(laneX[currentLane], laneChangeDuration)
+                          .SetEase(Ease.OutQuad)
+                          .SetUpdate(UpdateType.Fixed);
+        }
+           
+    }
+    #endregion
+
+    #region OLD Swipe L,R
+    //private void HandleSwipeRight(object sender, EventArgs e)
+    //{
+    //    if (!isAllowToMove) return;
+
+    //    // التحقق من موقع اللاعب الحالي ونقله للمسار الأيمن باستخدام rb.DOMoveX (لأداء فيزيائي أفضل)
+    //    if (currentXPos < middleXPos)
+    //    {
+    //        rb.DOMoveX(middleXPos, 0.5f, false);
+    //        currentXPos = middleXPos;
+    //    }
+    //    else if (currentXPos < rightXPos)
+    //    {
+    //        rb.DOMoveX(rightXPos, 0.5f, false);
+    //        currentXPos = rightXPos;
+    //    }
+    //}
+
+    //private void HandleSwipeLeft(object sender, EventArgs e)
+    //{
+    //    if (!isAllowToMove) return;
+
+    //    // التحقق من موقع اللاعب الحالي ونقله للمسار الأيسر باستخدام rb.DOMoveX
+    //    if (currentXPos > middleXPos)
+    //    {
+    //        rb.DOMoveX(middleXPos, 0.5f, false);
+    //        currentXPos = middleXPos;
+    //    }
+    //    else if (currentXPos > leftXPos)
+    //    {
+    //        rb.DOMoveX(leftXPos, 0.5f, false);
+    //        currentXPos = leftXPos;
+    //    }
+    //}
+
+    #endregion
 
     private void HandleSwipeDown(object sender, EventArgs e)
     {
