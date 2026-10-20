@@ -43,8 +43,6 @@ public class PlayerMovementModified : MonoBehaviour
     // تم جعله public static لكي تتمكن من قراءته في سكريبت القفز إذا احتجت لذلك
     public static bool isSliding = false;
 
-    // متغيرات لحفظ مواقع المسارات (يمين، وسط، يسار)
-    float currentXPos, middleXPos, rightXPos, leftXPos;
 
     // متغيرات لحفظ أبعاد المصادم الأصلية لاسترجاعها بعد التزحلق
     private float originalColliderHeight;
@@ -72,12 +70,6 @@ public class PlayerMovementModified : MonoBehaviour
     void Start()
     {
         isAllowToMove = true;
-
-        // تحديد إحداثيات المسارات بناءً على موقع اللاعب عند البداية
-        currentXPos = transform.position.x;
-        middleXPos = 0f;
-        rightXPos = 4f;
-        leftXPos = -4f;
 
         // الاشتراك في أحداث السحب (Swipes) من سكريبت إدارة اللمس
         if (Swipe.Instance != null)
@@ -140,7 +132,7 @@ public class PlayerMovementModified : MonoBehaviour
 
             if (Physics.Raycast(checkPos.position, rayDic, out RaycastHit hit, laneGap, whatIsGround))
             {
-                Debug.Log($"Hit {hit.collider.gameObject.name} laneGap = {laneGap} distance {hit.distance}");
+                
                 float distance = hit.distance;
                 stubmle = true;
                 Sequence seq = DOTween.Sequence();
@@ -154,7 +146,7 @@ public class PlayerMovementModified : MonoBehaviour
 
                 float outTime = Mathf.Abs(targetX - startX) / speed;
                 float backTime = Mathf.Abs(homeX - targetX) / speed;
-
+                Debug.Log($"Hit {hit.collider.gameObject.name} laneGap = {laneGap} distance {hit.distance} outTime = {outTime} backTime {backTime}");
                 seq.Append(rb.DOMoveX(targetX, outTime)
                               .SetEase(Ease.OutQuad)
                               .SetUpdate(UpdateType.Fixed))
@@ -281,7 +273,7 @@ public class PlayerMovementModified : MonoBehaviour
             playerCollider.height = originalColliderHeight;
             playerCollider.center = originalColliderCenter;
         }
-
+        GoBackToRunning();
         isSliding = false;
     }
 

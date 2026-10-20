@@ -91,6 +91,7 @@ public class Swipe : MonoBehaviour
                 }
                 else
                 {
+                    Debug.Log($"[Swipe] UP!");
                     OnSwipeUp?.Invoke(this, EventArgs.Empty);
                 }
             }
