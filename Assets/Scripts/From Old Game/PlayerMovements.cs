@@ -2,17 +2,18 @@ using System;
 using UnityEngine;
 using UnityEngine.Events;
 
-/// <summary>One owner for forward motion, lanes, gravity, jumping and sliding.</summary>
+/// <summary>Anchored runner: the world moves along -Z; this component owns X/Y motion.</summary>
+[DefaultExecutionOrder(100)]
 [DisallowMultipleComponent]
 [RequireComponent(typeof(CharacterController))]
 public class PlayerMovements : MonoBehaviour
 {
     public enum MovementState { Running, Jumping, Falling, Sliding, Diving, Stopped }
 
-    [Header("Forward running (world +Z)")]
-    [SerializeField, Min(0)] private float startSpeed = 10f;
-    [SerializeField, Min(0)] private float acceleration = 0.35f;
-    [SerializeField, Min(0)] private float maximumSpeed = 32f;
+    [Header("Moving world (player Z stays at its spawn position)")]
+    [Tooltip("Optional. Reads speed only; never moves, accelerates, or edits the manager.")]
+    [SerializeField] private ChunkManager worldSpeedSource;
+    [SerializeField] private bool readChunkManagerSpeed = true;
     [SerializeField] private bool startAutomatically = true;
     [SerializeField] private float fallOutHeight = -10f;
 
@@ -53,8 +54,9 @@ public class PlayerMovements : MonoBehaviour
     [SerializeField] private string runState = "Base Layer.Running";
     [SerializeField] private string jumpState = "Base Layer.Jump";
     [SerializeField] private string slideState = "Base Layer.Running Slide";
-    [Tooltip("Leave empty now. Set a full Animator state path after adding a fall animation.")]
+    [Tooltip("Optional controller state fallback when no standalone fall clip is assigned.")]
     [SerializeField] private string fallState = "";
+    [SerializeField] private AnimationClip fallAnimationClip;
     [SerializeField, Min(0)] private float animationBlendTime = 0.08f;
     [Tooltip("Existing clip reference used only to fit its playback speed to the physical jump.")]
     [SerializeField] private AnimationClip jumpAnimationClip;
@@ -76,6 +78,9 @@ public class PlayerMovements : MonoBehaviour
     public int TargetLane => targetLane;
     public bool IsChangingLane => changingLane;
     public int SideBumpCount { get; private set; }
+    public int LastSideBumpDirection { get; private set; }
+    public float FixedZ => fixedZ;
+    public float FallAnimationWeight => fallAnimationPlayer != null ? fallAnimationPlayer.FallWeight : 0f;
     public string StopReason { get; private set; }
     public event Action SideBumped;
     public event Action<Collider> FrontalCollision;
@@ -95,6 +100,8 @@ public class PlayerMovements : MonoBehaviour
     private Vector3 moveDirection;
     private int lastAnimationHash;
     private bool initialized;
+    private float fixedZ, worldQueryOffset, worldDistancePerStep;
+    private RunnerFallAnimation fallAnimationPlayer;
     private float WalkableNormalY => Mathf.Cos(controller.slopeLimit * Mathf.Deg2Rad);
 
     private void Awake() => Initialize();
@@ -126,16 +133,25 @@ public class PlayerMovements : MonoBehaviour
         standingHeight = controller.height;
         standingCenter = controller.center;
         feetOffset = standingCenter.y - standingHeight * 0.5f;
+        if (playerAnimator && playerAnimator.runtimeAnimatorController && fallAnimationClip)
+            fallAnimationPlayer = new RunnerFallAnimation(playerAnimator, fallAnimationClip, animationBlendTime);
         initialized = true;
         ResetRun(startAutomatically);
     }
 
-    private void OnEnable() { BindInput(); }
-    private void OnDisable() { UnbindInput(); }
-    private void Update()
+    private void OnEnable() { BindInput(); fallAnimationPlayer?.Resume(); }
+    private void OnDisable() { UnbindInput(); fallAnimationPlayer?.Pause(); }
+    private void OnDestroy() { fallAnimationPlayer?.Dispose(); }
+    private void Update() { BindInput(); }
+
+    // ChunkManager moves in FixedUpdate at the default order. Sample its new positions
+    // afterwards, including all fixed ticks when rendering is slower than physics.
+    private void FixedUpdate()
     {
-        BindInput();
-        Simulate(Time.deltaTime);
+        var source = worldSpeedSource ? worldSpeedSource : ChunkManager.instance;
+        float distance = readChunkManagerSpeed && source && source.isActiveAndEnabled
+            ? Mathf.Max(0f, source.chunksSpeed) * Time.fixedDeltaTime : 0f;
+        SimulateMovingWorld(Time.fixedDeltaTime, distance);
     }
 
     private void BindInput()
@@ -181,10 +197,13 @@ public class PlayerMovements : MonoBehaviour
         jumpRequestUntil = -1;
         lastGroundedTime = -10;
         jumpConsumed = false;
-        CurrentSpeed = Mathf.Min(startSpeed, maximumSpeed);
+        CurrentSpeed = 0f;
+        fixedZ = transform.position.z;
+        worldQueryOffset = 0f;
         running = isAllowToMove = beginRunning;
         StopReason = "";
         SideBumpCount = 0;
+        LastSideBumpDirection = 0;
         IsGrounded = ProbeGround(groundProbeDistance, out var ground);
         SupportHeight = IsGrounded ? ground.point.y : transform.position.y + feetOffset;
         lastAnimationHash = 0;
@@ -234,28 +253,52 @@ public class PlayerMovements : MonoBehaviour
         onRunStopped.Invoke();
     }
 
-    /// <summary>Advance movement. Disable this component when driving it manually.</summary>
-    public void Simulate(float deltaTime)
+    /// <summary>Simulate against a stationary world. For a moving map use SimulateMovingWorld.</summary>
+    public void Simulate(float deltaTime) => SimulateMovingWorld(deltaTime, 0f);
+
+    /// <summary>
+    /// Call AFTER the world moved, with its actual backward distance for this step.
+    /// Disable this component when another system calls this API manually.
+    /// Only reads world colliders. No world transforms or ChunkManager values are changed.
+    /// </summary>
+    public void SimulateMovingWorld(float deltaTime, float backwardDistance)
     {
-        if (!initialized || !IsRunning || deltaTime <= 0 || !controller.enabled) return;
-        // Bound catch-up after a long stall; collision travel remains subdivided.
+        if (!initialized || deltaTime <= 0f || !controller.enabled) return;
+        LockForwardPosition();
+        if (!IsRunning) return;
+        Physics.SyncTransforms();
         float dt = Mathf.Min(deltaTime, 0.1f);
+        backwardDistance = Mathf.Max(0f, backwardDistance);
+        CurrentSpeed = backwardDistance / deltaTime;
         float gravityBound = 2f * jumpHeight / (timeToJumpApex * timeToJumpApex) *
             Mathf.Max(fallMultiplier, diveGravityMultiplier);
         float verticalBound = Mathf.Min(terminalFallSpeed, Mathf.Abs(verticalSpeed) + gravityBound * dt);
-        float distanceBound = Mathf.Max(Mathf.Min(maximumSpeed, CurrentSpeed + acceleration * dt),
-            changingLane ? laneSpeed : 0, verticalBound) * dt;
+        float distanceBound = Mathf.Max(backwardDistance,
+            (changingLane ? laneSpeed : 0f) * dt, verticalBound * dt);
         int steps = Mathf.Max(1, Mathf.CeilToInt(distanceBound / maximumMoveStep));
-        float stepTime = dt / steps;
-        for (int i = 0; i < steps && IsRunning; i++) StepMovement(stepTime);
+        worldDistancePerStep = backwardDistance / steps;
+        // In the CURRENT world snapshot, the previous relative player position is
+        // behind the anchor. Sweep queries traverse that distance, not the player.
+        worldQueryOffset = -backwardDistance;
+        for (int i = 0; i < steps && IsRunning; i++) StepMovement(dt / steps);
+        worldQueryOffset = 0f;
+        LockForwardPosition();
         if (transform.position.y < fallOutHeight) StopRun("Fell out of the level");
         UpdateState();
+        fallAnimationPlayer?.Tick(dt);
+    }
+
+    private void LockForwardPosition()
+    {
+        if (Mathf.Abs(transform.position.z - fixedZ) < 0.000001f) return;
+        Vector3 position = transform.position;
+        position.z = fixedZ;
+        transform.position = position;
     }
 
     private void StepMovement(float dt)
     {
         simulationTime += dt;
-        CurrentSpeed = Mathf.MoveTowards(CurrentSpeed, maximumSpeed, acceleration * dt);
         bool wasGrounded = IsGrounded;
         IsGrounded = verticalSpeed <= 0 && ProbeGround(groundProbeDistance, out _);
         if (IsGrounded)
@@ -285,25 +328,23 @@ public class PlayerMovements : MonoBehaviour
         float verticalTravel = IsGrounded ? -groundStickSpeed * dt :
             (oldVerticalSpeed + verticalSpeed) * 0.5f * dt;
 
-        // Vertical first: jumping must clear an obstacle before forward contact.
+        // Vertical/lateral movement is local. Forward travel is a relative sweep only.
         Move(Vector3.up * verticalTravel, 3);
         StepLane(dt);
         if (!IsRunning) return;
-        Vector3 forward = Vector3.forward * (CurrentSpeed * dt);
-        if (Sweep(forward, out var front) && front.normal.z < -0.5f)
+        Vector3 incomingTravel = Vector3.forward * worldDistancePerStep;
+        if (Sweep(incomingTravel, out var front) && front.normal.z < -0.5f)
         {
-            float safe = Mathf.Max(0, front.distance - controller.skinWidth);
-            Move(Vector3.forward * Mathf.Min(forward.z, safe), 2);
             HitFront(front.collider);
             return;
         }
-        Move(forward, 2);
+        Move(incomingTravel, 2);
+        worldQueryOffset += worldDistancePerStep;
         if (!IsRunning) return;
 
-        // Keep contact down slopes without snapping a rising jump to the ground.
-        float snapDistance = groundProbeDistance;
-        if (wasGrounded) snapDistance += CurrentSpeed * dt *
-            Mathf.Tan(controller.slopeLimit * Mathf.Deg2Rad);
+        // Follow descending support without snapping an ascending jump down.
+        float slopeTravel = worldDistancePerStep * Mathf.Tan(controller.slopeLimit * Mathf.Deg2Rad);
+        float snapDistance = groundProbeDistance + (wasGrounded ? slopeTravel : 0f);
         IsGrounded = verticalSpeed <= 0 && ProbeGround(snapDistance, out var support);
         if (IsGrounded)
         {
@@ -357,6 +398,7 @@ public class PlayerMovements : MonoBehaviour
     private void BeginSideBump()
     {
         if (!changingLane || returningFromBump) return;
+        LastSideBumpDirection = Math.Sign(laneX[targetLane] - laneX[currentLane]);
         returningFromBump = true;
         targetLane = currentLane;
         queuedLaneDirection = 0;
@@ -382,7 +424,15 @@ public class PlayerMovements : MonoBehaviour
     {
         moveAxis = axis;
         moveDirection = displacement;
+        // Resolve each move at the same relative-world position as the sweeps.
+        // The offset exists only inside this collision calculation; every public
+        // simulation step and rendered frame ends at the captured Z anchor.
+        Vector3 queryPosition = transform.position;
+        queryPosition.z = fixedZ + worldQueryOffset;
+        transform.position = queryPosition;
+        Physics.SyncTransforms();
         var flags = controller.Move(displacement);
+        LockForwardPosition();
         if ((flags & CollisionFlags.Above) != 0 && verticalSpeed > 0) verticalSpeed = 0;
         moveAxis = 0;
         return flags;
@@ -401,7 +451,8 @@ public class PlayerMovements : MonoBehaviour
         nearest = default;
         float length = displacement.magnitude;
         if (length < 0.000001f) return false;
-        Capsule(transform.position, controller.height, controller.center, out var a, out var b);
+        Capsule(transform.position + Vector3.forward * worldQueryOffset,
+            controller.height, controller.center, out var a, out var b);
         int count = Physics.CapsuleCastNonAlloc(a, b,
             Mathf.Max(0.01f, controller.radius - controller.skinWidth),
             displacement / length, castHits, length + controller.skinWidth,
@@ -417,14 +468,14 @@ public class PlayerMovements : MonoBehaviour
         return distance < float.PositiveInfinity;
     }
 
-    private bool ProbeGround(float distance, out RaycastHit nearest)
+    private bool ProbeGround(float distance, out RaycastHit nearest, float lift = 0f)
     {
         nearest = default;
         float radius = Mathf.Max(0.01f, controller.radius - controller.skinWidth);
         Vector3 origin = transform.position + new Vector3(controller.center.x,
-            feetOffset + radius + 0.06f, controller.center.z);
+            feetOffset + radius + 0.06f + lift, controller.center.z + worldQueryOffset);
         int count = Physics.CapsuleCastNonAlloc(origin, origin, radius, Vector3.down,
-            castHits, distance + 0.06f, collisionMask, QueryTriggerInteraction.Ignore);
+            castHits, distance + 0.06f + lift, collisionMask, QueryTriggerInteraction.Ignore);
         float best = float.PositiveInfinity;
         for (int i = 0; i < count; i++)
         {
@@ -437,7 +488,8 @@ public class PlayerMovements : MonoBehaviour
 
     private bool CanStand()
     {
-        Capsule(transform.position, standingHeight, standingCenter, out var a, out var b);
+        Capsule(transform.position + Vector3.forward * worldQueryOffset,
+            standingHeight, standingCenter, out var a, out var b);
         // Skin margin excludes the floor contact while still testing the added headroom.
         int count = Physics.OverlapCapsuleNonAlloc(a, b,
             Mathf.Max(0.01f, controller.radius - controller.skinWidth * 2f),
@@ -499,7 +551,17 @@ public class PlayerMovements : MonoBehaviour
     private void PlayStateAnimation()
     {
         if (!playerAnimator || !playerAnimator.runtimeAnimatorController) return;
-        if (State == MovementState.Stopped) { playerAnimator.speed = 0; return; }
+        if (State == MovementState.Stopped)
+        {
+            if (fallAnimationPlayer != null) fallAnimationPlayer.SetStopped(true);
+            else playerAnimator.speed = 0f;
+            return;
+        }
+        if (fallAnimationPlayer != null)
+        {
+            fallAnimationPlayer.SetStopped(false);
+            fallAnimationPlayer.SetFalling(State == MovementState.Falling);
+        }
         playerAnimator.speed = 1f;
         if (jumpAnimationClip && (State == MovementState.Jumping ||
             (State == MovementState.Falling && string.IsNullOrWhiteSpace(fallState))))
@@ -509,14 +571,28 @@ public class PlayerMovements : MonoBehaviour
         }
         if (slideAnimationClip && (State == MovementState.Sliding || State == MovementState.Diving))
             playerAnimator.speed = slideAnimationClip.length / Mathf.Max(0.1f, slideDuration);
+        if (fallAnimationPlayer != null)
+        {
+            fallAnimationPlayer.SetBaseSpeed(playerAnimator.speed);
+            playerAnimator.speed = 1f;
+            if (State == MovementState.Falling) return;
+        }
         string path = State == MovementState.Running ? runState :
             State == MovementState.Jumping ? jumpState :
             State == MovementState.Sliding || State == MovementState.Diving ? slideState :
             State == MovementState.Falling ? fallState : "";
         if (string.IsNullOrWhiteSpace(path)) return;
         int hash = Animator.StringToHash(path);
-        if (hash == lastAnimationHash || !playerAnimator.HasState(0, hash)) return;
-        playerAnimator.CrossFadeInFixedTime(hash, animationBlendTime, 0);
+        if (hash == lastAnimationHash) return;
+        if (fallAnimationPlayer != null)
+        {
+            if (!fallAnimationPlayer.CrossFadeBase(hash, animationBlendTime)) return;
+        }
+        else
+        {
+            if (!playerAnimator.HasState(0, hash)) return;
+            playerAnimator.CrossFadeInFixedTime(hash, animationBlendTime, 0);
+        }
         lastAnimationHash = hash;
     }
 
@@ -530,8 +606,6 @@ public class PlayerMovements : MonoBehaviour
     {
         if (laneX == null || laneX.Length == 0) laneX = new[] { -4.5f, 0.5f, 4.5f };
         Array.Sort(laneX);
-        maximumSpeed = Mathf.Max(0, maximumSpeed);
-        startSpeed = Mathf.Clamp(startSpeed, 0, maximumSpeed);
         maximumMoveStep = Mathf.Max(0.05f, maximumMoveStep);
         laneChangeDuration = Mathf.Max(0.05f, laneChangeDuration);
         bumpReturnDuration = Mathf.Max(0.05f, bumpReturnDuration);
@@ -540,3 +614,4 @@ public class PlayerMovements : MonoBehaviour
         terminalFallSpeed = Mathf.Max(1, terminalFallSpeed);
     }
 }
+
