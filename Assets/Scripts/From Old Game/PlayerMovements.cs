@@ -1,302 +1,542 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-using DG.Tweening;
 using System;
+using UnityEngine;
+using UnityEngine.Events;
 
+/// <summary>One owner for forward motion, lanes, gravity, jumping and sliding.</summary>
+[DisallowMultipleComponent]
+[RequireComponent(typeof(CharacterController))]
 public class PlayerMovements : MonoBehaviour
 {
-    // قوة الدفع للأمام (متروكة لك إذا كنت تستخدمها لتحريك اللاعب المستمر)
-    [SerializeField] float forceValue = 10;
+    public enum MovementState { Running, Jumping, Falling, Sliding, Diving, Stopped }
 
-    [Header("Ground Check")]
-    // نقطة وهمية نضعها عند قدم اللاعب لإطلاق شعاع يكتشف الأرض
-    [SerializeField] Transform groundCheckPos;
-    // طول اللاعب (يستخدم لضمان عدم اكتشاف أسطح بعيدة جداً)
-    [SerializeField] float playerHight;
-    // تحديد ما هي الطبقة (Layer) التي نعتبرها أرضاً (مثل الشارع أو سقف الباص)
-    [SerializeField] LayerMask whatIsGround;
+    [Header("Forward running (world +Z)")]
+    [SerializeField, Min(0)] private float startSpeed = 10f;
+    [SerializeField, Min(0)] private float acceleration = 0.35f;
+    [SerializeField, Min(0)] private float maximumSpeed = 32f;
+    [SerializeField] private bool startAutomatically = true;
+    [SerializeField] private float fallOutHeight = -10f;
 
-    [Header("Slide Settings")]
-    // متحكم الأنيميشن الخاص باللاعب
+    [Header("Lanes (world X, left to right)")]
+    [SerializeField] private float[] laneX = { -4.5f, 0.5f, 4.5f };
+    [SerializeField, Min(0.05f)] private float laneChangeDuration = 0.22f;
+    [SerializeField, Min(0.05f)] private float bumpReturnDuration = 0.18f;
+
+    [Header("Jump")]
+    // Starting point: height 2.5-3.4 m, apex 0.32-0.42 s, fall multiplier 1.3-1.8.
+    // Height controls clearance; apex time controls floatiness. Gravity = 2h / t².
+    // Current bus roofs are about 3 m high. Use the existing ramps or raise jumpHeight.
+    [SerializeField, Min(0.1f)] private float jumpHeight = 2.8f;
+    [SerializeField, Min(0.1f)] private float timeToJumpApex = 0.38f;
+    [SerializeField, Min(1)] private float fallMultiplier = 1.5f;
+    [SerializeField, Min(1)] private float terminalFallSpeed = 40f;
+    [SerializeField, Range(0, 0.2f)] private float coyoteTime = 0.08f;
+    [SerializeField, Range(0, 0.25f)] private float jumpBufferTime = 0.12f;
+
+    [Header("Slide and airborne dive")]
+    [SerializeField, Min(0.1f)] private float slideDuration = 0.75f;
+    [SerializeField, Min(0.1f)] private float slideColliderHeight = 0.85f;
+    [SerializeField, Min(1)] private float diveSpeed = 22f;
+    [SerializeField, Min(1)] private float diveGravityMultiplier = 2f;
+    [Tooltip("An airborne slide receives at least this much slide time after landing.")]
+    [SerializeField, Min(0)] private float minimumSlideAfterLanding = 0.45f;
+
+    [Header("Collision")]
+    [SerializeField] private LayerMask collisionMask = ~0;
+    [SerializeField, Range(0.01f, 0.3f)] private float groundProbeDistance = 0.12f;
+    [SerializeField, Min(0.1f)] private float groundStickSpeed = 6f;
+    [Tooltip("Maximum distance per movement substep. Smaller values cost more CPU.")]
+    [SerializeField, Range(0.05f, 0.5f)] private float maximumMoveStep = 0.15f;
+    [SerializeField] private UnityEvent onRunStopped = new UnityEvent();
+
+    [Header("Existing animations (no controller edits required)")]
     [SerializeField] private Animator playerAnimator;
-    // سرعة الهبوط للأرض إذا قام اللاعب بالتزحلق وهو في الهواء
-    [SerializeField] private float fallDuration = 0.15f;
-    // مدة التزحلق الكلية قبل أن يعود اللاعب لوضع الركض
-    [SerializeField] private float slideDuration = 0.8f;
+    [SerializeField] private string runState = "Base Layer.Running";
+    [SerializeField] private string jumpState = "Base Layer.Jump";
+    [SerializeField] private string slideState = "Base Layer.Running Slide";
+    [Tooltip("Leave empty now. Set a full Animator state path after adding a fall animation.")]
+    [SerializeField] private string fallState = "";
+    [SerializeField, Min(0)] private float animationBlendTime = 0.08f;
+    [Tooltip("Existing clip reference used only to fit its playback speed to the physical jump.")]
+    [SerializeField] private AnimationClip jumpAnimationClip;
+    [Tooltip("Existing clip reference used only to fit its playback speed to slideDuration.")]
+    [SerializeField] private AnimationClip slideAnimationClip;
 
-    [Header("Collider Settings")]
-    // المصادم الكبسولي الخاص باللاعب
-    [SerializeField] private CapsuleCollider playerCollider;
-    // الارتفاع الجديد للمصادم أثناء التزحلق (لكي لا يصطدم بالعقبات العالية)
-    [SerializeField] private float slideColliderHeight = 1f;
-    // المركز الجديد للمصادم أثناء التزحلق (للحفاظ على أسفل الكبسولة ملامساً للأرض)
-    [SerializeField] private Vector3 slideColliderCenter = new Vector3(0, 0.5f, 0);
-
-    // مرجع للمحرك الفيزيائي
-    Rigidbody rb;
-
-    // متغير عام للتحكم بحركة اللاعب (يمكن استخدامه لإيقاف اللعبة عند الخسارة)
+    // Kept for compatibility with existing callers.
     public static bool isAllowToMove;
+    public static bool isSliding;
 
-    // متغير عام لمعرفة ما إذا كان اللاعب يتزحلق (لتجنب تداخل الحركات)
-    // تم جعله public static لكي تتمكن من قراءته في سكريبت القفز إذا احتجت لذلك
-    public static bool isSliding = false;
+    public MovementState State { get; private set; }
+    public bool IsGrounded { get; private set; }
+    public bool IsSliding => sliding;
+    public bool IsRunning => running && isAllowToMove;
+    public float CurrentSpeed { get; private set; }
+    public float VerticalSpeed => verticalSpeed;
+    public float SupportHeight { get; private set; }
+    public int CurrentLane => currentLane;
+    public int TargetLane => targetLane;
+    public bool IsChangingLane => changingLane;
+    public int SideBumpCount { get; private set; }
+    public string StopReason { get; private set; }
+    public event Action SideBumped;
+    public event Action<Collider> FrontalCollision;
+    public event Action<MovementState> StateChanged;
 
-    // متغيرات لحفظ مواقع المسارات (يمين، وسط، يسار)
-    float currentXPos, middleXPos, rightXPos, leftXPos;
+    private CharacterController controller;
+    private Swipe input;
+    private readonly RaycastHit[] castHits = new RaycastHit[32];
+    private readonly Collider[] overlaps = new Collider[32];
+    private float standingHeight, feetOffset, verticalSpeed, simulationTime;
+    private Vector3 standingCenter;
+    private float jumpRequestUntil = -1f, lastGroundedTime = -10f, slideRemaining;
+    private float laneSpeed;
+    private int currentLane, targetLane, queuedLaneDirection;
+    private bool running, sliding, changingLane, returningFromBump, jumpConsumed;
+    private int moveAxis;
+    private Vector3 moveDirection;
+    private int lastAnimationHash;
+    private bool initialized;
+    private float WalkableNormalY => Mathf.Cos(controller.slopeLimit * Mathf.Deg2Rad);
 
-    // متغيرات لحفظ أبعاد المصادم الأصلية لاسترجاعها بعد التزحلق
-    private float originalColliderHeight;
-    private Vector3 originalColliderCenter;
+    private void Awake() => Initialize();
 
-    private void Awake()
+    /// <summary>Idempotent setup, also usable by deterministic validation tools.</summary>
+    public void Initialize()
     {
-        // جلب المكونات المرتبطة باللاعب تلقائياً إذا لم يتم سحبها في الـ Inspector
-        rb = GetComponent<Rigidbody>();
-
-        if (!playerAnimator)
-            playerAnimator = GetComponent<Animator>();
-
-        if (!playerCollider)
-            playerCollider = GetComponent<CapsuleCollider>();
-
-        // حفظ الأبعاد الأصلية للمصادم قبل بدء اللعب
-        if (playerCollider != null)
+        if (initialized) return;
+        controller = GetComponent<CharacterController>();
+        // Legacy scenes can retain their components without two physics owners.
+        var capsule = GetComponent<CapsuleCollider>();
+        if (capsule)
         {
-            originalColliderHeight = playerCollider.height;
-            originalColliderCenter = playerCollider.center;
+            controller.height = capsule.height;
+            controller.radius = capsule.radius;
+            controller.center = capsule.center;
+            controller.skinWidth = Mathf.Min(0.02f, capsule.radius * 0.1f);
+            capsule.enabled = false;
         }
-    }
-
-    void Start()
-    {
-        isAllowToMove = true;
-
-        // تحديد إحداثيات المسارات بناءً على موقع اللاعب عند البداية
-        currentXPos = transform.position.x;
-        middleXPos = 0f;
-        rightXPos = 4f;
-        leftXPos = -4f;
-
-        // الاشتراك في أحداث السحب (Swipes) من سكريبت إدارة اللمس
-        if (Swipe.Instance != null)
+        var body = GetComponent<Rigidbody>();
+        if (body)
         {
-            Swipe.Instance.OnSwipeDown += HandleSwipeDown;
-            Swipe.Instance.OnSwipeLeft += HandleSwipeLeft;
-            Swipe.Instance.OnSwipeRight += HandleSwipeRight;
+            body.useGravity = false;
+            body.isKinematic = true;
+            body.detectCollisions = false;
         }
+        if (!playerAnimator) playerAnimator = GetComponentInChildren<Animator>();
+        if (playerAnimator) playerAnimator.applyRootMotion = false;
+        standingHeight = controller.height;
+        standingCenter = controller.center;
+        feetOffset = standingCenter.y - standingHeight * 0.5f;
+        initialized = true;
+        ResetRun(startAutomatically);
     }
 
-    private void OnDestroy()
+    private void OnEnable() { BindInput(); }
+    private void OnDisable() { UnbindInput(); }
+    private void Update()
     {
-        // إلغاء الاشتراك من الأحداث عند تدمير اللاعب أو إعادة تشغيل المرحلة لمنع أخطاء الذاكرة
-        if (Swipe.Instance != null)
+        BindInput();
+        Simulate(Time.deltaTime);
+    }
+
+    private void BindInput()
+    {
+        if (input == Swipe.Instance) return;
+        UnbindInput();
+        input = Swipe.Instance;
+        if (!input) return;
+        input.OnSwipeUp += HandleUp;
+        input.OnSwipeDown += HandleDown;
+        input.OnSwipeLeft += HandleLeft;
+        input.OnSwipeRight += HandleRight;
+    }
+
+    private void UnbindInput()
+    {
+        if (!input) { input = null; return; }
+        input.OnSwipeUp -= HandleUp;
+        input.OnSwipeDown -= HandleDown;
+        input.OnSwipeLeft -= HandleLeft;
+        input.OnSwipeRight -= HandleRight;
+        input = null;
+    }
+
+    private void HandleUp(object sender, EventArgs e) => RequestJump();
+    private void HandleDown(object sender, EventArgs e) => RequestSlide();
+    private void HandleLeft(object sender, EventArgs e) => RequestLaneChange(-1);
+    private void HandleRight(object sender, EventArgs e) => RequestLaneChange(1);
+
+    /// <summary>Reset at the current position; a future restart system owns respawning.</summary>
+    public void ResetRun(bool beginRunning = true)
+    {
+        if (!initialized) return;
+        RestoreStandingShape();
+        currentLane = NearestLane(transform.position.x);
+        targetLane = currentLane;
+        changingLane = Mathf.Abs(transform.position.x - laneX[currentLane]) > 0.01f;
+        laneSpeed = Mathf.Abs(transform.position.x - laneX[currentLane]) / laneChangeDuration;
+        returningFromBump = false;
+        queuedLaneDirection = 0;
+        sliding = isSliding = false;
+        verticalSpeed = simulationTime = slideRemaining = 0;
+        jumpRequestUntil = -1;
+        lastGroundedTime = -10;
+        jumpConsumed = false;
+        CurrentSpeed = Mathf.Min(startSpeed, maximumSpeed);
+        running = isAllowToMove = beginRunning;
+        StopReason = "";
+        SideBumpCount = 0;
+        IsGrounded = ProbeGround(groundProbeDistance, out var ground);
+        SupportHeight = IsGrounded ? ground.point.y : transform.position.y + feetOffset;
+        lastAnimationHash = 0;
+        SetState(beginRunning ? MovementState.Running : MovementState.Stopped, true);
+    }
+
+    public void RequestJump()
+    {
+        if (IsRunning) jumpRequestUntil = simulationTime + jumpBufferTime;
+    }
+
+    public void RequestSlide()
+    {
+        if (!IsRunning || sliding) return;
+        jumpRequestUntil = -1;
+        sliding = isSliding = true;
+        slideRemaining = slideDuration;
+        SetHeight(Mathf.Clamp(slideColliderHeight, controller.radius * 2f, standingHeight));
+        if (!IsGrounded)
         {
-            Swipe.Instance.OnSwipeDown -= HandleSwipeDown;
-            Swipe.Instance.OnSwipeLeft -= HandleSwipeLeft;
-            Swipe.Instance.OnSwipeRight -= HandleSwipeRight;
+            verticalSpeed = -Mathf.Min(diveSpeed, terminalFallSpeed);
+            jumpConsumed = true;
         }
+        UpdateState();
     }
 
-
-    #region Updated Move L,R (AHMED)
-    // سبب الاستخدام للحرص على وضع قيمة معينة لضمان
-    // وجوداللاعب في تلك النقطة دون اي اخطاء
-    // و يمكن تغيرها عند تغير حجم الخريطة الاصلي
-
-    [SerializeField] private float[] laneX = { -4.5f, 0.5f, 4.5f }; // يمين ,منتصف ,يسار
-    [SerializeField] private float laneChangeDuration = 0.5f; // المدة التي يحتاجها ليصل لالخط او الطريق الثاني
-    [SerializeField] private Transform checkPos;
-    private int currentLane = 1; // ابدء بالنصف
-
-    private void HandleSwipeRight(object sender, EventArgs e)
+    public void RequestLaneChange(int direction)
     {
-        ChangeLane(1);
+        if (!IsRunning || direction == 0 || returningFromBump) return;
+        direction = Math.Sign(direction);
+        if (changingLane) { queuedLaneDirection = direction; return; }
+        targetLane = Mathf.Clamp(currentLane + direction, 0, laneX.Length - 1);
+        if (targetLane == currentLane) return;
+        changingLane = true;
+        laneSpeed = Mathf.Abs(laneX[targetLane] - transform.position.x) / laneChangeDuration;
     }
 
-    private void HandleSwipeLeft(object sender, EventArgs e)
+    public void StopRun(string reason = "Stopped")
     {
-        ChangeLane(-1);
+        if (!running) return;
+        running = isAllowToMove = false;
+        CurrentSpeed = verticalSpeed = 0;
+        queuedLaneDirection = 0;
+        jumpRequestUntil = -1;
+        StopReason = reason;
+        SetState(MovementState.Stopped);
+        onRunStopped.Invoke();
     }
-    //خزن التويين لازالته عند تفعيل العملية بسرعة
-    //لتفادي تفعيل اثنتين سوياا و لتفادي الاخطاء
-    private Tween laneTween;
-    private bool hitObsticle = false;
-    private bool stubmle =false;
-    private void ChangeLane(int direction)
+
+    /// <summary>Advance movement. Disable this component when driving it manually.</summary>
+    public void Simulate(float deltaTime)
     {
-        if (!isAllowToMove) return;
-        if(stubmle) return;
-        int targetLane = Mathf.Clamp(currentLane + direction, 0, laneX.Length - 1);
-        float laneGap = Mathf.Abs(laneX[targetLane] - laneX[currentLane]);
-        laneTween?.Kill();
-        Vector3 rayDic = direction == 1 ? Vector3.right : Vector3.left;
-        hitObsticle = Physics.Raycast(checkPos.position, rayDic, laneGap, whatIsGround);
-        Vector3 end = new Vector3(rayDic.x * laneGap, rayDic.y, rayDic.z);
-        Debug.DrawLine(checkPos.position, end, Color.red);
-        if (hitObsticle)
+        if (!initialized || !IsRunning || deltaTime <= 0 || !controller.enabled) return;
+        // Bound catch-up after a long stall; collision travel remains subdivided.
+        float dt = Mathf.Min(deltaTime, 0.1f);
+        float gravityBound = 2f * jumpHeight / (timeToJumpApex * timeToJumpApex) *
+            Mathf.Max(fallMultiplier, diveGravityMultiplier);
+        float verticalBound = Mathf.Min(terminalFallSpeed, Mathf.Abs(verticalSpeed) + gravityBound * dt);
+        float distanceBound = Mathf.Max(Mathf.Min(maximumSpeed, CurrentSpeed + acceleration * dt),
+            changingLane ? laneSpeed : 0, verticalBound) * dt;
+        int steps = Mathf.Max(1, Mathf.CeilToInt(distanceBound / maximumMoveStep));
+        float stepTime = dt / steps;
+        for (int i = 0; i < steps && IsRunning; i++) StepMovement(stepTime);
+        if (transform.position.y < fallOutHeight) StopRun("Fell out of the level");
+        UpdateState();
+    }
+
+    private void StepMovement(float dt)
+    {
+        simulationTime += dt;
+        CurrentSpeed = Mathf.MoveTowards(CurrentSpeed, maximumSpeed, acceleration * dt);
+        bool wasGrounded = IsGrounded;
+        IsGrounded = verticalSpeed <= 0 && ProbeGround(groundProbeDistance, out _);
+        if (IsGrounded)
         {
+            lastGroundedTime = simulationTime;
+            jumpConsumed = false;
+        }
 
-            if (Physics.Raycast(checkPos.position, rayDic, out RaycastHit hit, laneGap, whatIsGround))
+        if (jumpRequestUntil >= simulationTime && !jumpConsumed &&
+            (IsGrounded || simulationTime - lastGroundedTime <= coyoteTime) &&
+            (!sliding || CanStand()))
+        {
+            sliding = isSliding = false;
+            RestoreStandingShape();
+            verticalSpeed = 2f * jumpHeight / timeToJumpApex;
+            jumpRequestUntil = -1;
+            jumpConsumed = true;
+            IsGrounded = false;
+        }
+
+        float gravity = 2f * jumpHeight / (timeToJumpApex * timeToJumpApex);
+        float multiplier = sliding && !IsGrounded ? diveGravityMultiplier :
+            verticalSpeed < 0 ? fallMultiplier : 1f;
+        float oldVerticalSpeed = verticalSpeed;
+        verticalSpeed = IsGrounded ? -groundStickSpeed :
+            Mathf.Max(verticalSpeed - gravity * multiplier * dt, -terminalFallSpeed);
+        float verticalTravel = IsGrounded ? -groundStickSpeed * dt :
+            (oldVerticalSpeed + verticalSpeed) * 0.5f * dt;
+
+        // Vertical first: jumping must clear an obstacle before forward contact.
+        Move(Vector3.up * verticalTravel, 3);
+        StepLane(dt);
+        if (!IsRunning) return;
+        Vector3 forward = Vector3.forward * (CurrentSpeed * dt);
+        if (Sweep(forward, out var front) && front.normal.z < -0.5f)
+        {
+            float safe = Mathf.Max(0, front.distance - controller.skinWidth);
+            Move(Vector3.forward * Mathf.Min(forward.z, safe), 2);
+            HitFront(front.collider);
+            return;
+        }
+        Move(forward, 2);
+        if (!IsRunning) return;
+
+        // Keep contact down slopes without snapping a rising jump to the ground.
+        float snapDistance = groundProbeDistance;
+        if (wasGrounded) snapDistance += CurrentSpeed * dt *
+            Mathf.Tan(controller.slopeLimit * Mathf.Deg2Rad);
+        IsGrounded = verticalSpeed <= 0 && ProbeGround(snapDistance, out var support);
+        if (IsGrounded)
+        {
+            if (ProbeGround(snapDistance, out support))
             {
-                Debug.Log($"Hit {hit.collider.gameObject.name} laneGap = {laneGap} distance {hit.distance}");
-                float distance = hit.distance;
-                stubmle = true;
-                Sequence seq = DOTween.Sequence();
-                // الحساب الصحيح اولا احسب سرعة تغير الطريق ثم احسب المسافة و هكذا احصل على وقت اصح
-                // (باستعمال معادلة: (السرعة = المسافة *الزمن
-                float speed = laneGap / laneChangeDuration;
+                float gap = transform.position.y + feetOffset - support.point.y;
+                if (gap > controller.skinWidth) Move(Vector3.down * gap, 3);
+                SupportHeight = support.point.y;
+            }
+            verticalSpeed = -groundStickSpeed;
+            lastGroundedTime = simulationTime;
+            jumpConsumed = false;
+            if (!wasGrounded && sliding)
+                slideRemaining = Mathf.Max(slideRemaining, minimumSlideAfterLanding);
+        }
 
-                float startX = rb.position.x;
-                float targetX = laneX[currentLane] + distance * direction;
-                float homeX = laneX[currentLane];
-
-                float outTime = Mathf.Abs(targetX - startX) / speed;
-                float backTime = Mathf.Abs(homeX - targetX) / speed;
-
-                seq.Append(rb.DOMoveX(targetX, outTime)
-                              .SetEase(Ease.OutQuad)
-                              .SetUpdate(UpdateType.Fixed))
-                   .Append(rb.DOMoveX(homeX, backTime)
-                              .SetEase(Ease.OutQuad)
-                              .SetUpdate(UpdateType.Fixed))
-                   .OnComplete(() => stubmle = false);
-
+        if (sliding && IsGrounded)
+        {
+            // Air time never consumes the grounded slide window.
+            slideRemaining -= dt;
+            if (slideRemaining <= 0 && CanStand())
+            {
+                sliding = isSliding = false;
+                RestoreStandingShape();
             }
         }
-        else
-        {
-            if (targetLane == currentLane) return;
-
-            currentLane = targetLane;
-            //قتل التويين الحيوان لابعاد البقز
-
-            laneTween = rb.DOMoveX(laneX[currentLane], laneChangeDuration)
-                          .SetEase(Ease.OutQuad)
-                          .SetUpdate(UpdateType.Fixed);
-        }
-           
     }
-    #endregion
 
-    #region OLD Swipe L,R
-    //private void HandleSwipeRight(object sender, EventArgs e)
-    //{
-    //    if (!isAllowToMove) return;
-
-    //    // التحقق من موقع اللاعب الحالي ونقله للمسار الأيمن باستخدام rb.DOMoveX (لأداء فيزيائي أفضل)
-    //    if (currentXPos < middleXPos)
-    //    {
-    //        rb.DOMoveX(middleXPos, 0.5f, false);
-    //        currentXPos = middleXPos;
-    //    }
-    //    else if (currentXPos < rightXPos)
-    //    {
-    //        rb.DOMoveX(rightXPos, 0.5f, false);
-    //        currentXPos = rightXPos;
-    //    }
-    //}
-
-    //private void HandleSwipeLeft(object sender, EventArgs e)
-    //{
-    //    if (!isAllowToMove) return;
-
-    //    // التحقق من موقع اللاعب الحالي ونقله للمسار الأيسر باستخدام rb.DOMoveX
-    //    if (currentXPos > middleXPos)
-    //    {
-    //        rb.DOMoveX(middleXPos, 0.5f, false);
-    //        currentXPos = middleXPos;
-    //    }
-    //    else if (currentXPos > leftXPos)
-    //    {
-    //        rb.DOMoveX(leftXPos, 0.5f, false);
-    //        currentXPos = leftXPos;
-    //    }
-    //}
-
-    #endregion
-
-    private void HandleSwipeDown(object sender, EventArgs e)
+    private void StepLane(float dt)
     {
-        // منع التزحلق إذا كان اللاعب يتزحلق مسبقاً أو غير مسموح له بالحركة
-        if (!isAllowToMove || isSliding) return;
+        if (!changingLane) return;
+        float goal = laneX[targetLane];
+        float dx = Mathf.MoveTowards(transform.position.x, goal, laneSpeed * dt) - transform.position.x;
+        Vector3 lateral = Vector3.right * dx;
+        if (Sweep(lateral, out var side))
+        {
+            float safe = Mathf.Max(0, side.distance - controller.skinWidth);
+            Move(Vector3.right * Mathf.Sign(dx) * Mathf.Min(Mathf.Abs(dx), safe), 1);
+            BeginSideBump();
+        }
+        else Move(lateral, 1);
 
-        StartCoroutine(SlideDown());
+        if (Mathf.Abs(transform.position.x - laneX[targetLane]) > 0.015f) return;
+        currentLane = targetLane;
+        changingLane = returningFromBump = false;
+        int queued = queuedLaneDirection;
+        queuedLaneDirection = 0;
+        if (queued != 0) RequestLaneChange(queued);
     }
 
-    void Update()
+    private void BeginSideBump()
     {
-        if (!isAllowToMove) { return; }
-
-        // نظام حماية (Failsafe): إذا سقط اللاعب تحت الخريطة يتم إعادته للسطح
-        if (transform.position.y < -5)
-        {
-            transform.position = new Vector3(transform.position.x, 0, transform.position.z);
-        }
+        if (!changingLane || returningFromBump) return;
+        returningFromBump = true;
+        targetLane = currentLane;
+        queuedLaneDirection = 0;
+        laneSpeed = Mathf.Max(1, Mathf.Abs(transform.position.x - laneX[currentLane]) / bumpReturnDuration);
+        SideBumpCount++;
+        OnSideBumpPursuerApproachRequested();
+        SideBumped?.Invoke();
     }
 
-    IEnumerator SlideDown()
+    private void OnSideBumpPursuerApproachRequested()
     {
-        isSliding = true;
-
-        // 1. إعادة ضبط كل الحركات وتشغيل حركة التزحلق
-        if (playerAnimator != null)
-        {
-            playerAnimator.ResetTrigger("Run");
-            playerAnimator.ResetTrigger("Jump");
-            playerAnimator.SetTrigger("Slide");
-        }
-
-        // 2. تصغير المصادم لتفادي العقبات العالية
-        if (playerCollider != null)
-        {
-            playerCollider.height = slideColliderHeight;
-            playerCollider.center = slideColliderCenter;
-        }
-
-        // 3. إطلاق شعاع لاكتشاف الأرضية تحته (سواء كانت الأرض العادية أو سقف باص)
-        if (Physics.Raycast(groundCheckPos.position, Vector3.down, out RaycastHit hitInfo, 10f, whatIsGround))
-        {
-            // النقطة المستهدفة هي مكان الاصطدام + 0.05 لرفع المجسم شعرة عن الأرض ومنع ارتداد الفيزياء
-            float targetYPosition = hitInfo.point.y + 0.05f;
-
-            // إذا كان اللاعب أعلى من الأرض بمسافة معينة (في وضع قفز مثلاً)
-            if (transform.position.y > targetYPosition + 0.1f)
-            {
-                // تصفير السرعة العمودية لمنع تعارض الجاذبية مع حركة DOTween
-                rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0, rb.linearVelocity.z);
-
-                // استخدام rb.DOMoveY بدلاً من transform.DOMoveY لمنع الاختراق الفيزيائي (Tunneling)
-                rb.DOMoveY(targetYPosition, fallDuration).SetEase(Ease.Linear);
-            }
-        }
-
-        // 4. الانتظار حتى تنتهي مدة التزحلق (نفس مدة الأنيميشن تقريباً)
-        yield return new WaitForSeconds(slideDuration);
-
-        // 5. استرجاع الحجم الطبيعي للمصادم
-        if (playerCollider != null)
-        {
-            playerCollider.height = originalColliderHeight;
-            playerCollider.center = originalColliderCenter;
-        }
-
-        isSliding = false;
+        // TODO: Bring the pursuer closer here when that system is implemented.
     }
 
-    // دالة لاسترجاع حالة الركض بشكل قسري (تُستدعى عادة من أنيميشن إيفنت أو عند الاصطدام)
+    private void HitFront(Collider obstacle)
+    {
+        if (!IsRunning) return;
+        StopRun("Frontal collision: " + (obstacle ? obstacle.name : "obstacle"));
+        FrontalCollision?.Invoke(obstacle);
+    }
+
+    private CollisionFlags Move(Vector3 displacement, int axis)
+    {
+        moveAxis = axis;
+        moveDirection = displacement;
+        var flags = controller.Move(displacement);
+        if ((flags & CollisionFlags.Above) != 0 && verticalSpeed > 0) verticalSpeed = 0;
+        moveAxis = 0;
+        return flags;
+    }
+
+    private void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        if (hit.normal.y >= WalkableNormalY) return;
+        if (moveAxis == 1 && Mathf.Abs(hit.normal.x) > 0.5f &&
+            Vector3.Dot(moveDirection, hit.normal) < 0) BeginSideBump();
+        else if (moveAxis == 2 && hit.normal.z < -0.5f) HitFront(hit.collider);
+    }
+
+    private bool Sweep(Vector3 displacement, out RaycastHit nearest)
+    {
+        nearest = default;
+        float length = displacement.magnitude;
+        if (length < 0.000001f) return false;
+        Capsule(transform.position, controller.height, controller.center, out var a, out var b);
+        int count = Physics.CapsuleCastNonAlloc(a, b,
+            Mathf.Max(0.01f, controller.radius - controller.skinWidth),
+            displacement / length, castHits, length + controller.skinWidth,
+            collisionMask, QueryTriggerInteraction.Ignore);
+        float distance = float.PositiveInfinity;
+        for (int i = 0; i < count; i++)
+        {
+            var hit = castHits[i];
+            if (IsSelf(hit.collider) || hit.normal.y >= WalkableNormalY ||
+                Vector3.Dot(displacement, hit.normal) >= -0.000001f) continue;
+            if (hit.distance < distance) { nearest = hit; distance = hit.distance; }
+        }
+        return distance < float.PositiveInfinity;
+    }
+
+    private bool ProbeGround(float distance, out RaycastHit nearest)
+    {
+        nearest = default;
+        float radius = Mathf.Max(0.01f, controller.radius - controller.skinWidth);
+        Vector3 origin = transform.position + new Vector3(controller.center.x,
+            feetOffset + radius + 0.06f, controller.center.z);
+        int count = Physics.CapsuleCastNonAlloc(origin, origin, radius, Vector3.down,
+            castHits, distance + 0.06f, collisionMask, QueryTriggerInteraction.Ignore);
+        float best = float.PositiveInfinity;
+        for (int i = 0; i < count; i++)
+        {
+            var hit = castHits[i];
+            if (IsSelf(hit.collider) || hit.normal.y < WalkableNormalY) continue;
+            if (hit.distance < best) { nearest = hit; best = hit.distance; }
+        }
+        return best < float.PositiveInfinity;
+    }
+
+    private bool CanStand()
+    {
+        Capsule(transform.position, standingHeight, standingCenter, out var a, out var b);
+        // Skin margin excludes the floor contact while still testing the added headroom.
+        int count = Physics.OverlapCapsuleNonAlloc(a, b,
+            Mathf.Max(0.01f, controller.radius - controller.skinWidth * 2f),
+            overlaps, collisionMask, QueryTriggerInteraction.Ignore);
+        if (count == overlaps.Length) return false; // Fail closed if the query is saturated.
+        for (int i = 0; i < count; i++) if (!IsSelf(overlaps[i])) return false;
+        return true;
+    }
+
+    private bool IsSelf(Collider other) => !other || other.transform == transform ||
+        other.transform.IsChildOf(transform);
+
+    private void Capsule(Vector3 position, float height, Vector3 center, out Vector3 a, out Vector3 b)
+    {
+        Vector3 worldCenter = position + center;
+        float halfSegment = Mathf.Max(0, height * 0.5f - controller.radius);
+        a = worldCenter + Vector3.up * halfSegment;
+        b = worldCenter - Vector3.up * halfSegment;
+    }
+
+    private void SetHeight(float height)
+    {
+        controller.height = height;
+        controller.center = new Vector3(standingCenter.x, feetOffset + height * 0.5f, standingCenter.z);
+        controller.stepOffset = Mathf.Min(0.2f, height * 0.2f);
+    }
+
+    private void RestoreStandingShape()
+    {
+        controller.height = standingHeight;
+        controller.center = standingCenter;
+        controller.stepOffset = Mathf.Min(0.2f, standingHeight * 0.2f);
+    }
+
+    private int NearestLane(float x)
+    {
+        int nearest = 0;
+        for (int i = 1; i < laneX.Length; i++)
+            if (Mathf.Abs(x - laneX[i]) < Mathf.Abs(x - laneX[nearest])) nearest = i;
+        return nearest;
+    }
+
+    private void UpdateState()
+    {
+        SetState(!IsRunning ? MovementState.Stopped :
+            sliding ? (IsGrounded ? MovementState.Sliding : MovementState.Diving) :
+            IsGrounded ? MovementState.Running :
+            verticalSpeed > 0 ? MovementState.Jumping : MovementState.Falling);
+    }
+
+    private void SetState(MovementState next, bool force = false)
+    {
+        if (!force && State == next) return;
+        State = next;
+        PlayStateAnimation();
+        StateChanged?.Invoke(next);
+    }
+
+    private void PlayStateAnimation()
+    {
+        if (!playerAnimator || !playerAnimator.runtimeAnimatorController) return;
+        if (State == MovementState.Stopped) { playerAnimator.speed = 0; return; }
+        playerAnimator.speed = 1f;
+        if (jumpAnimationClip && (State == MovementState.Jumping ||
+            (State == MovementState.Falling && string.IsNullOrWhiteSpace(fallState))))
+        {
+            float flightTime = timeToJumpApex * (1f + 1f / Mathf.Sqrt(fallMultiplier));
+            playerAnimator.speed = jumpAnimationClip.length / Mathf.Max(0.1f, flightTime);
+        }
+        if (slideAnimationClip && (State == MovementState.Sliding || State == MovementState.Diving))
+            playerAnimator.speed = slideAnimationClip.length / Mathf.Max(0.1f, slideDuration);
+        string path = State == MovementState.Running ? runState :
+            State == MovementState.Jumping ? jumpState :
+            State == MovementState.Sliding || State == MovementState.Diving ? slideState :
+            State == MovementState.Falling ? fallState : "";
+        if (string.IsNullOrWhiteSpace(path)) return;
+        int hash = Animator.StringToHash(path);
+        if (hash == lastAnimationHash || !playerAnimator.HasState(0, hash)) return;
+        playerAnimator.CrossFadeInFixedTime(hash, animationBlendTime, 0);
+        lastAnimationHash = hash;
+    }
+
+    // Existing clip event: animation cannot override slide clearance or airborne physics.
     public void GoBackToRunning()
     {
-        playerAnimator.SetTrigger("Run");
-        playerAnimator.ResetTrigger("Slide");
-        playerAnimator.ResetTrigger("Jump");
+        if (IsGrounded && !sliding && IsRunning) PlayStateAnimation();
+    }
 
-        // استرجاع الحجم الطبيعي للمصادم للحماية
-        if (playerCollider != null)
-        {
-            playerCollider.height = originalColliderHeight;
-            playerCollider.center = originalColliderCenter;
-        }
+    private void OnValidate()
+    {
+        if (laneX == null || laneX.Length == 0) laneX = new[] { -4.5f, 0.5f, 4.5f };
+        Array.Sort(laneX);
+        maximumSpeed = Mathf.Max(0, maximumSpeed);
+        startSpeed = Mathf.Clamp(startSpeed, 0, maximumSpeed);
+        maximumMoveStep = Mathf.Max(0.05f, maximumMoveStep);
+        laneChangeDuration = Mathf.Max(0.05f, laneChangeDuration);
+        bumpReturnDuration = Mathf.Max(0.05f, bumpReturnDuration);
+        timeToJumpApex = Mathf.Max(0.1f, timeToJumpApex);
+        jumpHeight = Mathf.Max(0.1f, jumpHeight);
+        terminalFallSpeed = Mathf.Max(1, terminalFallSpeed);
     }
 }
