@@ -49,7 +49,7 @@ public class PlayerMovements : MonoBehaviour
     [SerializeField, Range(0.05f, 0.5f)] private float maximumMoveStep = 0.15f;
     [SerializeField] private UnityEvent onRunStopped = new UnityEvent();
 
-    [Header("Existing animations (no controller edits required)")]
+    [Header("Animation clips (controller and source assets stay unchanged)")]
     [SerializeField] private Animator playerAnimator;
     [SerializeField] private string runState = "Base Layer.Running";
     [SerializeField] private string jumpState = "Base Layer.Jump";
@@ -57,7 +57,17 @@ public class PlayerMovements : MonoBehaviour
     [Tooltip("Optional controller state fallback when no standalone fall clip is assigned.")]
     [SerializeField] private string fallState = "";
     [SerializeField] private AnimationClip fallAnimationClip;
-    [SerializeField, Min(0)] private float animationBlendTime = 0.08f;
+    [SerializeField, HideInInspector] private float animationBlendTime = 0.08f;
+    [SerializeField] private AnimationClip runAnimationClip;
+    [Header("Animation transitions (seconds)")]
+    [SerializeField, Range(0.02f, 0.3f)] private float jumpBlendTime = 0.1f;
+    [SerializeField, Range(0.02f, 0.4f)] private float fallBlendTime = 0.18f;
+    [SerializeField, Range(0.02f, 0.4f)] private float landingBlendTime = 0.16f;
+    [SerializeField, Range(0.02f, 0.3f)] private float slideInBlendTime = 0.1f;
+    [SerializeField, Range(0.02f, 0.4f)] private float slideOutBlendTime = 0.18f;
+    [SerializeField, Range(0.02f, 0.3f)] private float diveBlendTime = 0.12f;
+    [Tooltip("Ignore very short support gaps before showing the fall pose.")]
+    [SerializeField, Range(0f, 0.15f)] private float fallAnimationDelay = 0.06f;
     [Tooltip("Existing clip reference used only to fit its playback speed to the physical jump.")]
     [SerializeField] private AnimationClip jumpAnimationClip;
     [Tooltip("Existing clip reference used only to fit its playback speed to slideDuration.")]
@@ -80,7 +90,7 @@ public class PlayerMovements : MonoBehaviour
     public int SideBumpCount { get; private set; }
     public int LastSideBumpDirection { get; private set; }
     public float FixedZ => fixedZ;
-    public float FallAnimationWeight => fallAnimationPlayer != null ? fallAnimationPlayer.FallWeight : 0f;
+    public float FallAnimationWeight => animationBlender != null ? animationBlender.FallWeight : 0f;
     public string StopReason { get; private set; }
     public event Action SideBumped;
     public event Action<Collider> FrontalCollision;
@@ -101,7 +111,11 @@ public class PlayerMovements : MonoBehaviour
     private int lastAnimationHash;
     private bool initialized;
     private float fixedZ, worldQueryOffset, worldDistancePerStep;
-    private RunnerFallAnimation fallAnimationPlayer;
+    private RunnerAnimationBlender animationBlender;
+    private bool jumpAnimationActive;
+    private float jumpAnimationEndTime;
+    private RunnerAnimationBlender.Motion lastAnimationMotion;
+    private float JumpFlightTime => timeToJumpApex * (1f + 1f / Mathf.Sqrt(fallMultiplier));
     private float WalkableNormalY => Mathf.Cos(controller.slopeLimit * Mathf.Deg2Rad);
 
     private void Awake() => Initialize();
@@ -133,16 +147,27 @@ public class PlayerMovements : MonoBehaviour
         standingHeight = controller.height;
         standingCenter = controller.center;
         feetOffset = standingCenter.y - standingHeight * 0.5f;
-        if (playerAnimator && playerAnimator.runtimeAnimatorController && fallAnimationClip)
-            fallAnimationPlayer = new RunnerFallAnimation(playerAnimator, fallAnimationClip, animationBlendTime);
+        if (playerAnimator && playerAnimator.runtimeAnimatorController)
+        {
+            if (!runAnimationClip) runAnimationClip = FindControllerClip(runState);
+            if (!jumpAnimationClip) jumpAnimationClip = FindControllerClip(jumpState);
+            if (!slideAnimationClip) slideAnimationClip = FindControllerClip(slideState);
+            if (runAnimationClip && jumpAnimationClip && fallAnimationClip && slideAnimationClip)
+                animationBlender = new RunnerAnimationBlender(playerAnimator, runAnimationClip,
+                    jumpAnimationClip, fallAnimationClip, slideAnimationClip);
+        }
         initialized = true;
         ResetRun(startAutomatically);
     }
 
-    private void OnEnable() { BindInput(); fallAnimationPlayer?.Resume(); }
-    private void OnDisable() { UnbindInput(); fallAnimationPlayer?.Pause(); }
-    private void OnDestroy() { fallAnimationPlayer?.Dispose(); }
-    private void Update() { BindInput(); }
+    private void OnEnable() { BindInput(); animationBlender?.Resume(); }
+    private void OnDisable() { UnbindInput(); animationBlender?.Pause(); }
+    private void OnDestroy() { animationBlender?.Dispose(); }
+    private void Update()
+    {
+        BindInput();
+        animationBlender?.Tick(Time.deltaTime);
+    }
 
     // ChunkManager moves in FixedUpdate at the default order. Sample its new positions
     // afterwards, including all fixed ticks when rendering is slower than physics.
@@ -207,6 +232,9 @@ public class PlayerMovements : MonoBehaviour
         IsGrounded = ProbeGround(groundProbeDistance, out var ground);
         SupportHeight = IsGrounded ? ground.point.y : transform.position.y + feetOffset;
         lastAnimationHash = 0;
+        lastAnimationMotion = RunnerAnimationBlender.Motion.Run;
+        jumpAnimationActive = false;
+        animationBlender?.Reset();
         SetState(beginRunning ? MovementState.Running : MovementState.Stopped, true);
     }
 
@@ -285,7 +313,9 @@ public class PlayerMovements : MonoBehaviour
         LockForwardPosition();
         if (transform.position.y < fallOutHeight) StopRun("Fell out of the level");
         UpdateState();
-        fallAnimationPlayer?.Tick(dt);
+        // Re-evaluate a prolonged descent even when its physical state stays Falling.
+        PlayStateAnimation();
+        if (!isActiveAndEnabled) animationBlender?.Tick(dt);
     }
 
     private void LockForwardPosition()
@@ -314,6 +344,8 @@ public class PlayerMovements : MonoBehaviour
             sliding = isSliding = false;
             RestoreStandingShape();
             verticalSpeed = 2f * jumpHeight / timeToJumpApex;
+            jumpAnimationActive = true;
+            jumpAnimationEndTime = simulationTime + JumpFlightTime;
             jumpRequestUntil = -1;
             jumpConsumed = true;
             IsGrounded = false;
@@ -550,51 +582,76 @@ public class PlayerMovements : MonoBehaviour
 
     private void PlayStateAnimation()
     {
-        if (!playerAnimator || !playerAnimator.runtimeAnimatorController) return;
+        if (!playerAnimator) return;
         if (State == MovementState.Stopped)
         {
-            if (fallAnimationPlayer != null) fallAnimationPlayer.SetStopped(true);
+            if (animationBlender != null) animationBlender.SetStopped(true);
             else playerAnimator.speed = 0f;
             return;
         }
-        if (fallAnimationPlayer != null)
-        {
-            fallAnimationPlayer.SetStopped(false);
-            fallAnimationPlayer.SetFalling(State == MovementState.Falling);
-        }
+
+        if (IsGrounded || sliding) jumpAnimationActive = false;
+        // A flip is authored as one complete action. Do not replace it with the
+        // upright fall pose at its midpoint just because vertical velocity changes sign.
+        // A longer drop beyond that action, or walking off a roof, still uses Fall.
+        bool completingJump = State == MovementState.Falling && jumpAnimationActive &&
+            simulationTime <= jumpAnimationEndTime;
+        bool briefSupportGap = State == MovementState.Falling && !jumpAnimationActive &&
+            simulationTime - lastGroundedTime < fallAnimationDelay;
+        var motion = State == MovementState.Jumping || completingJump
+            ? RunnerAnimationBlender.Motion.Jump
+            : sliding ? RunnerAnimationBlender.Motion.Slide
+            : State == MovementState.Falling && !briefSupportGap
+                ? RunnerAnimationBlender.Motion.Fall : RunnerAnimationBlender.Motion.Run;
+        float duration = motion == RunnerAnimationBlender.Motion.Jump ? jumpBlendTime :
+            motion == RunnerAnimationBlender.Motion.Fall ? fallBlendTime :
+            motion == RunnerAnimationBlender.Motion.Slide
+                ? (State == MovementState.Diving ? diveBlendTime : slideInBlendTime)
+                : lastAnimationMotion == RunnerAnimationBlender.Motion.Slide
+                    ? slideOutBlendTime : landingBlendTime;
+        float speed = motion == RunnerAnimationBlender.Motion.Jump && jumpAnimationClip
+            ? jumpAnimationClip.length / Mathf.Max(0.1f, JumpFlightTime)
+            : motion == RunnerAnimationBlender.Motion.Slide && slideAnimationClip
+                ? slideAnimationClip.length / Mathf.Max(0.1f, slideDuration) : 1f;
         playerAnimator.speed = 1f;
-        if (jumpAnimationClip && (State == MovementState.Jumping ||
-            (State == MovementState.Falling && string.IsNullOrWhiteSpace(fallState))))
+        if (animationBlender != null)
         {
-            float flightTime = timeToJumpApex * (1f + 1f / Mathf.Sqrt(fallMultiplier));
-            playerAnimator.speed = jumpAnimationClip.length / Mathf.Max(0.1f, flightTime);
+            animationBlender.SetStopped(false);
+            animationBlender.Play(motion, duration, speed);
         }
-        if (slideAnimationClip && (State == MovementState.Sliding || State == MovementState.Diving))
-            playerAnimator.speed = slideAnimationClip.length / Mathf.Max(0.1f, slideDuration);
-        if (fallAnimationPlayer != null)
+        else if (playerAnimator.runtimeAnimatorController)
         {
-            fallAnimationPlayer.SetBaseSpeed(playerAnimator.speed);
-            playerAnimator.speed = 1f;
-            if (State == MovementState.Falling) return;
+            // Compatibility for scenes that have not assigned all standalone clips.
+            string path = motion == RunnerAnimationBlender.Motion.Run ? runState :
+                motion == RunnerAnimationBlender.Motion.Jump ? jumpState :
+                motion == RunnerAnimationBlender.Motion.Slide ? slideState : fallState;
+            if (string.IsNullOrWhiteSpace(path)) return;
+            int hash = Animator.StringToHash(path);
+            playerAnimator.speed = speed;
+            if (hash != lastAnimationHash && playerAnimator.HasState(0, hash))
+            {
+                playerAnimator.CrossFadeInFixedTime(hash,
+                    duration > 0 ? duration : animationBlendTime, 0);
+                lastAnimationHash = hash;
+            }
         }
-        string path = State == MovementState.Running ? runState :
-            State == MovementState.Jumping ? jumpState :
-            State == MovementState.Sliding || State == MovementState.Diving ? slideState :
-            State == MovementState.Falling ? fallState : "";
-        if (string.IsNullOrWhiteSpace(path)) return;
-        int hash = Animator.StringToHash(path);
-        if (hash == lastAnimationHash) return;
-        if (fallAnimationPlayer != null)
-        {
-            if (!fallAnimationPlayer.CrossFadeBase(hash, animationBlendTime)) return;
-        }
-        else
-        {
-            if (!playerAnimator.HasState(0, hash)) return;
-            playerAnimator.CrossFadeInFixedTime(hash, animationBlendTime, 0);
-        }
-        lastAnimationHash = hash;
+        lastAnimationMotion = motion;
     }
+
+    private AnimationClip FindControllerClip(string statePath)
+    {
+        if (string.IsNullOrWhiteSpace(statePath)) return null;
+        string clipName = statePath.Substring(statePath.LastIndexOf('.') + 1);
+        foreach (var clip in playerAnimator.runtimeAnimatorController.animationClips)
+            if (clip && string.Equals(clip.name, clipName, StringComparison.OrdinalIgnoreCase))
+                return clip;
+        return null;
+    }
+
+#if UNITY_EDITOR
+    /// <summary>Evaluate the same animation graph used in play on a temporary preview rig.</summary>
+    public void PreviewAnimation(float deltaTime) => animationBlender?.EvaluatePreview(deltaTime);
+#endif
 
     // Existing clip event: animation cannot override slide clearance or airborne physics.
     public void GoBackToRunning()
@@ -614,4 +671,3 @@ public class PlayerMovements : MonoBehaviour
         terminalFallSpeed = Mathf.Max(1, terminalFallSpeed);
     }
 }
-
