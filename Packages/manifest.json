@@ -1,6 +1,9 @@
 {
   "dependencies": {
+    "com.unity.ai.assistant": "2.21.0-pre.1",
+    "com.unity.ai.inference": "2.6.1",
     "com.unity.ai.navigation": "2.0.14",
+    "com.unity.cinemachine": "3.1.7",
     "com.unity.device-simulator.devices": "1.0.1",
     "com.unity.formats.fbx": "5.1.6",
     "com.unity.ide.rider": "3.0.40",
