@@ -1,129 +1,122 @@
 using UnityEngine;
+using Unity.Cinemachine;
+using Unity.Cinemachine.TargetTracking;
 
-/// <summary>Anchored-Z runner camera with lateral framing and brief directional impact feedback.</summary>
+/// <summary>يوجه هدف Cinemachine قرب منتصف الطريق؛ الـ Brain وحده يحرك الكاميرا الفعلية.</summary>
 [DisallowMultipleComponent]
 public class RunnerCameraFollow : MonoBehaviour
 {
     [SerializeField] private PlayerMovements target;
-    [SerializeField] private Vector3 offset = new Vector3(0f, 5.2f, -10f);
-    [SerializeField, Range(0, 1)] private float lateralFollow = 1f;
-    [SerializeField, Range(0, 1)] private float airborneVerticalFollow = 0.22f;
-    [SerializeField, Min(0.01f)] private float lateralSmoothTime = 0.08f;
-    [SerializeField, Min(0.01f)] private float verticalSmoothTime = 0.22f;
-    [SerializeField, Range(0, 45)] private float pitch = 17f;
+    [SerializeField] private CinemachineCamera virtualCamera;
+    [SerializeField] private CinemachineBrain brain;
+    [SerializeField] private Transform trackingAnchor;
+    [Tooltip("مكان اللاعب على الشاشة في المسارين الخارجيين: 0.23 يعني 27% و73% من عرض الشاشة.")]
+    [SerializeField, Range(0.1f, 0.35f)] private float sideViewportOffset = 0.23f;
+    [SerializeField, Range(0, 1)] private float airborneVerticalFollow = 0.12f;
+    [SerializeField, Min(0)] private float lateralDamping = 0.08f;
+    [SerializeField, Min(0)] private float verticalDamping = 0.65f;
+    [SerializeField, Min(1)] private float followDistance = 7.8f;
+    [SerializeField, Min(1)] private float cameraHeight = 4.4f;
+    [SerializeField, Range(0, 45)] private float pitch = 8f;
     [SerializeField, Range(35, 80)] private float fieldOfView = 55f;
-
-    [Header("Keep the player visible, including portrait screens")]
-    [SerializeField, Range(0.05f, 0.35f)] private float viewportMargin = 0.18f;
-    [SerializeField, Min(0)] private float framingPadding = 0.4f;
-
-    [Header("Side bump feedback (set amplitude and roll to zero to disable)")]
+    [SerializeField, Min(1)] private float trackHalfWidth = 5f;
     [SerializeField, Range(0, 0.3f)] private float impactAmplitude = 0.1f;
-    [SerializeField, Range(0, 3f)] private float impactRoll = 0.8f;
+    [SerializeField, Range(0, 3)] private float impactRoll = 0.8f;
     [SerializeField, Range(0.05f, 0.5f)] private float impactDuration = 0.22f;
     [SerializeField, Range(1, 30)] private float impactFrequency = 12f;
-
-    private float originX, fixedCameraZ, baseY, xVelocity, yVelocity;
-    private Vector3 followPosition;
-    private bool initialized, sessionPaused;
     private PlayerMovements subscribedTarget;
-    private Camera cameraComponent;
-    private float impactAge = 100f, impactDirection = 1f;
+    private CinemachineFollow follow;
+    private float originX, fixedZ, impactAge = 100f, impactDirection = 1f;
+    private bool initialized, sessionPaused;
     public bool IsImpactActive => impactAge < impactDuration;
+    public Vector3 ImpactOffset { get; private set; }
+    public float ImpactRoll { get; private set; }
 
-    private void OnEnable() { BindTarget(); }
-    private void OnDisable() { UnbindTarget(); impactAge = 100f; initialized = false; }
-    private void Start() => SnapToTarget();
-
+    private void OnEnable() => BindTarget();
+    private void OnDisable() { UnbindTarget(); initialized = false; }
+    private void Start() { if (!initialized) SnapToTarget(); }
     private void BindTarget()
     {
         if (subscribedTarget == target) return;
-        UnbindTarget();
-        subscribedTarget = target;
+        UnbindTarget(); subscribedTarget = target;
         if (subscribedTarget) subscribedTarget.SideBumped += OnSideBumped;
     }
-
     private void UnbindTarget()
     {
         if (subscribedTarget) subscribedTarget.SideBumped -= OnSideBumped;
         subscribedTarget = null;
     }
-
-    /// <summary>الجولة تحدد هدف الكاميرا صراحة، مع فك الاشتراك عن الهدف السابق.</summary>
-    public void SetTarget(PlayerMovements player)
-    {
-        target = player;
-        BindTarget();
-        initialized = false;
-    }
-
-    // تجميد حركة الكاميرا ومؤقت الهزة دون تغيير الزمن العام للتطبيق.
+    public void SetTarget(PlayerMovements player) { target = player; BindTarget(); initialized = false; }
     public void SetSessionPaused(bool value) => sessionPaused = value;
-
     private void OnSideBumped()
     {
+        impactAge = 0;
         impactDirection = target.LastSideBumpDirection == 0 ? 1 : target.LastSideBumpDirection;
-        impactAge = 0f; // Replace a previous impulse, never accumulate unlimited shake.
     }
 
     public void SnapToTarget()
     {
-        if (!target) return;
+        if (!target || !virtualCamera || !brain || !trackingAnchor) return;
         BindTarget();
         originX = target.transform.position.x;
-        fixedCameraZ = target.transform.position.z + offset.z;
-        baseY = target.SupportHeight;
-        xVelocity = yVelocity = 0;
-        impactAge = 100f;
-        followPosition = new Vector3(originX + offset.x, baseY + offset.y, fixedCameraZ);
-        transform.SetPositionAndRotation(followPosition, Quaternion.Euler(pitch, 0, 0));
-        cameraComponent = GetComponent<Camera>();
-        if (cameraComponent) cameraComponent.fieldOfView = fieldOfView;
+        fixedZ = target.transform.position.z;
+        impactAge = 100f; ImpactOffset = Vector3.zero; ImpactRoll = 0;
+        follow = virtualCamera.GetComponent<CinemachineFollow>();
+        virtualCamera.Follow = trackingAnchor;
+        brain.UpdateMethod = CinemachineBrain.UpdateMethods.ManualUpdate;
+        // بعض نسخ المشهد القديمة كانت تعطل Brain؛ نفعّله عند تجهيز الجولة.
+        brain.enabled = true;
+        UpdateAnchor();
+        ConfigureFraming();
+        // إلغاء تاريخ التخميد عند إعادة الجولة يمنع تحليق الكاميرا من مكان الجولة السابقة.
+        virtualCamera.PreviousStateIsValid = false;
+        brain.ManualUpdate();
         initialized = true;
     }
 
-    private void LateUpdate() => SimulateFollow(Time.deltaTime);
+    private void UpdateAnchor()
+    {
+        // نحافظ على حجم اللاعب بقرب ثابت، ونضعه جانب الكادر بدل توسيع المسافة لإظهار عرض الطريق كله.
+        float aspect = brain.OutputCamera ? Mathf.Max(0.25f, brain.OutputCamera.aspect) : 9f / 16f;
+        float radians = pitch * Mathf.Deg2Rad;
+        float chestDepth = followDistance * Mathf.Cos(radians) + (cameraHeight - 0.9f) * Mathf.Sin(radians);
+        float halfWidth = chestDepth * Mathf.Tan(fieldOfView * Mathf.Deg2Rad * 0.5f) * aspect;
+        float laneFraction = Mathf.Clamp((target.transform.position.x - originX) / trackHalfWidth, -1, 1);
+        float x = target.transform.position.x - laneFraction * (2 * sideViewportOffset * halfWidth);
+        float y = target.SupportHeight + Mathf.Max(0, target.transform.position.y - target.SupportHeight) * airborneVerticalFollow;
+        trackingAnchor.SetPositionAndRotation(new Vector3(x, y, fixedZ), Quaternion.identity);
+    }
 
-    /// <summary>Manual equivalent of LateUpdate for deterministic framing checks.</summary>
+    private void ConfigureFraming()
+    {
+        // لا يتغير البعد على Z عند تبديل المسار أو تغيير أبعاد نافذة اللعب.
+        virtualCamera.Lens.FieldOfView = fieldOfView;
+        virtualCamera.transform.rotation = Quaternion.Euler(pitch, 0, 0);
+        if (follow)
+        {
+            follow.FollowOffset = new Vector3(0, cameraHeight, -followDistance);
+            follow.TrackerSettings.BindingMode = BindingMode.WorldSpace;
+            follow.TrackerSettings.PositionDamping = new Vector3(lateralDamping, verticalDamping, 0);
+        }
+    }
+
+    private void LateUpdate() => SimulateFollow(Time.deltaTime);
     public void SimulateFollow(float deltaTime)
     {
         if (sessionPaused || !target || deltaTime <= 0) return;
-        BindTarget();
         if (!initialized) SnapToTarget();
-        Vector3 player = target.transform.position;
-        baseY = Mathf.SmoothDamp(baseY, target.SupportHeight, ref yVelocity,
-            verticalSmoothTime, Mathf.Infinity, deltaTime);
-        float desiredX = originX + (player.x - originX) * lateralFollow + offset.x;
-        float x = Mathf.SmoothDamp(followPosition.x, desiredX, ref xVelocity,
-            lateralSmoothTime, Mathf.Infinity, deltaTime);
-        float desiredY = baseY + offset.y +
-            Mathf.Max(0, player.y - target.SupportHeight) * airborneVerticalFollow;
-        float y = Mathf.Lerp(followPosition.y, desiredY, 1f - Mathf.Exp(-deltaTime / verticalSmoothTime));
-        if (cameraComponent)
-        {
-            Vector3 forward = Quaternion.Euler(pitch, 0, 0) * Vector3.forward;
-            float depth = Mathf.Max(0.1f, Vector3.Dot(player + Vector3.up -
-                new Vector3(x, y, fixedCameraZ), forward));
-            float halfWidth = depth * Mathf.Tan(cameraComponent.fieldOfView * Mathf.Deg2Rad * 0.5f) *
-                cameraComponent.aspect;
-            float visibleHalfWidth = Mathf.Max(0, halfWidth * (1f - 2f * viewportMargin) -
-                framingPadding - impactAmplitude);
-            // Clamp only the lag that would push the player outside the safe frame.
-            float framedX = Mathf.Clamp(x, player.x - visibleHalfWidth, player.x + visibleHalfWidth);
-            if (!Mathf.Approximately(x, framedX)) xVelocity = 0;
-            x = framedX;
-        }
-        followPosition = new Vector3(x, y, fixedCameraZ);
-        float wave = 0f;
-        if (impactAge < impactDuration)
+        if (!initialized) return;
+        UpdateAnchor(); ConfigureFraming();
+        float wave = 0;
+        if (IsImpactActive)
         {
             impactAge = Mathf.Min(impactDuration, impactAge + deltaTime);
-            float envelope = 1f - impactAge / impactDuration;
-            wave = Mathf.Sin(impactAge * impactFrequency * Mathf.PI * 2f) *
-                envelope * envelope * impactDirection;
+            float envelope = 1 - impactAge / impactDuration;
+            wave = Mathf.Sin(impactAge * impactFrequency * Mathf.PI * 2) * envelope * envelope * impactDirection;
         }
-        transform.SetPositionAndRotation(followPosition + Vector3.right * (wave * impactAmplitude),
-            Quaternion.Euler(pitch, 0, -wave * impactRoll));
+        ImpactOffset = Vector3.right * (wave * impactAmplitude);
+        ImpactRoll = -wave * impactRoll;
+        // تحديث يدوي واحد بعد تحريك الهدف، ويتوقف بالكامل عند إيقاف الجولة مؤقتًا.
+        brain.ManualUpdate();
     }
 }
-
