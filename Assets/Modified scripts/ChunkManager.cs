@@ -31,7 +31,8 @@ public class ChunkManager : MonoBehaviour
         float movement = chunksSpeed * Time.fixedDeltaTime;
         if (loadedChunks.Count < activeChunk + 1)
         {
-            
+            if (Chunks.Count <= 0) return;
+
             int indx = Random.Range(0, Chunks.Count - 1);
             Debug.Log($"{indx}");
             GameObject obj = Chunks[indx];

@@ -42,7 +42,7 @@ public class JumpModified : MonoBehaviour
 
     private void HandleSwipeUp(object sender, EventArgs e)
     {
-        Debug.Log($"[HandleSwipeUp] Event Swipe UP Recived!");
+        //Debug.Log($"[HandleSwipeUp] Event Swipe UP Recived!");
         jumpRequested = true;
     }
 
@@ -67,7 +67,7 @@ public class JumpModified : MonoBehaviour
         }
         
         ApplyGravity();
-        Debug.Log($"Method stops here{isGrounded}");
+        //Debug.Log($"Method stops here{isGrounded}");
         // تنفيذ القفز
         if (isGrounded && jumpRequested)
         {
@@ -83,7 +83,7 @@ public class JumpModified : MonoBehaviour
             }
             else if (leftGround && velocityY <= 0)
             {
-                Debug.Log($"[jump] landed");
+                //Debug.Log($"[jump] landed");
                 jumping = false;
                 leftGround = false;
                 isGrounded = true;
@@ -94,22 +94,13 @@ public class JumpModified : MonoBehaviour
 
     private void CalculateGravityAndJumpVelocity()
     {
-
-        #region Modified Jump (AHMEDJ)
-
-
-
-        #endregion
-
-        #region old Jump and gravity
         gravity = -9.8f;
         jumpVelocity = Mathf.Sqrt(2f * Mathf.Abs(gravity) * jumpHeight);
-        #endregion
     }
 
     private void HandleJumpInput()
     {
-        Debug.Log($"[HandleJumpInput] JUMP!");
+        //Debug.Log($"[HandleJumpInput] JUMP!");
         playerAnimator.ResetTrigger("Run");
         playerAnimator.ResetTrigger("Slide");
         playerAnimator.SetTrigger("Jump");
