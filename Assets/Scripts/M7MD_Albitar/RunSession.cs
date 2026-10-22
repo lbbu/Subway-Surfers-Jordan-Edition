@@ -15,6 +15,8 @@ public sealed class RunSession : MonoBehaviour
     [SerializeField] private Swipe input;
     [SerializeField] private RunnerCameraFollow runnerCamera;
     [SerializeField] private RunnerWorldSource world;
+    [SerializeField] private PlayerHealth health;
+    [SerializeField] private PlayerFeedback feedback;
     [SerializeField] private bool startAutomatically = true;
     [SerializeField] private bool desktopSessionControls = true;
 
@@ -23,6 +25,7 @@ public sealed class RunSession : MonoBehaviour
     public bool IsInitialized => initialized;
     public event Action<RunState> StateChanged;
     public event Action RunStarted;
+    public event Action RunPrepared;
     public event Action<string> RunEnded;
 
     private Vector3 spawnPosition;
@@ -56,11 +59,11 @@ public sealed class RunSession : MonoBehaviour
         if (initialized) return;
         Unsubscribe();
         initialized = false;
-        if (!player || !input || !runnerCamera || !world)
+        if (!player || !input || !runnerCamera || !world || !health)
         {
             if (world) world.SetMoving(false);
             if (input) input.SetGameplayEnabled(false);
-            Debug.LogError("RunSession: اربط اللاعب والإدخال والكاميرا ومصدر حركة الماب.", this);
+            Debug.LogError("RunSession: اربط اللاعب والصحة والإدخال والكاميرا ومصدر حركة الماب.", this);
             return;
         }
         spawnPosition = player.transform.position;
@@ -69,6 +72,8 @@ public sealed class RunSession : MonoBehaviour
         runnerCamera.SetTarget(player);
         player.ConfigureSession(input, world);
         player.ReinitializeForSession();
+        health.Configure(player, this);
+        if (feedback) feedback.Initialize();
         initialized = true;
         Subscribe();
         PrepareRun();
@@ -113,6 +118,7 @@ public sealed class RunSession : MonoBehaviour
         runnerCamera.SetSessionPaused(true);
         GameOverReason = "";
         SetState(RunState.Ready);
+        RunPrepared?.Invoke();
     }
 
     public void StartRun()
@@ -153,7 +159,8 @@ public sealed class RunSession : MonoBehaviour
         GameOverReason = string.IsNullOrWhiteSpace(reason) ? "انتهت الجولة" : reason;
         input.SetGameplayEnabled(false);
         world.SetMoving(false);
-        runnerCamera.SetSessionPaused(true);
+        // نسمح لأثر الضربة الأخيرة أن ينتهي بصريًا بعد توقف الجولة.
+        runnerCamera.SetSessionPaused(false);
         // نغيّر الحالة قبل إيقاف اللاعب لتجنب تكرار الخسارة إذا عاد الحدث من اللاعب.
         SetState(RunState.GameOver);
         player.StopRun(GameOverReason);

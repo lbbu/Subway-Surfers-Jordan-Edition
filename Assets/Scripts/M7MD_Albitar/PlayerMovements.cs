@@ -48,6 +48,8 @@ public class PlayerMovements : MonoBehaviour
     [SerializeField] private LayerMask collisionMask = ~0;
     [SerializeField, Range(0.01f, 0.3f)] private float groundProbeDistance = 0.12f;
     [SerializeField, Min(0.1f)] private float groundStickSpeed = 6f;
+    [Tooltip("أقصى فرق صغير بين القدم وحافة سطح قابل للمشي؛ لا يسمح بتجاوز واجهة عائق مرتفع.")]
+    [SerializeField, Range(0f, 0.3f)] private float ledgeStepHeight = 0.2f;
     [Tooltip("Maximum distance per movement substep. Smaller values cost more CPU.")]
     [SerializeField, Range(0.05f, 0.5f)] private float maximumMoveStep = 0.15f;
     [SerializeField] private UnityEvent onRunStopped = new UnityEvent();
@@ -97,6 +99,9 @@ public class PlayerMovements : MonoBehaviour
     public event Action<string> RunStopped;
     public event Action SideBumped;
     public event Action<Collider> FrontalCollision;
+    public event Action<RunnerImpact> ImpactDetected;
+    public event Action Jumped;
+    public event Action<float> Landed;
     public event Action<MovementState> StateChanged;
 
     private CharacterController controller;
@@ -111,8 +116,11 @@ public class PlayerMovements : MonoBehaviour
     private bool running, sliding, changingLane, returningFromBump, jumpConsumed;
     private int moveAxis;
     private Vector3 moveDirection;
+    private float pendingLedgeLift;
     private int lastAnimationHash;
     private bool initialized, paused;
+    private int impactSequence;
+    private float airborneTime;
     private float fixedZ, worldQueryOffset, worldDistancePerStep;
     private RunnerAnimationBlender animationBlender;
     private bool jumpAnimationActive;
@@ -276,6 +284,8 @@ public class PlayerMovements : MonoBehaviour
         running = beginRunning;
         StopReason = "";
         SideBumpCount = 0;
+        impactSequence = 0;
+        airborneTime = 0;
         LastSideBumpDirection = 0;
         IsGrounded = ProbeGround(groundProbeDistance, out var ground);
         SupportHeight = IsGrounded ? ground.point.y : transform.position.y + feetOffset;
@@ -362,7 +372,8 @@ public class PlayerMovements : MonoBehaviour
         for (int i = 0; i < steps && IsRunning; i++) StepMovement(dt / steps);
         worldQueryOffset = 0f;
         LockForwardPosition();
-        if (transform.position.y < fallOutHeight) StopRun("Fell out of the level");
+        if (IsRunning && transform.position.y < fallOutHeight)
+            ImpactDetected?.Invoke(new RunnerImpact(RunnerImpact.Kind.Fall, ++impactSequence, 0, transform.position, null));
         UpdateState();
         // Re-evaluate a prolonged descent even when its physical state stays Falling.
         PlayStateAnimation();
@@ -381,6 +392,7 @@ public class PlayerMovements : MonoBehaviour
     {
         simulationTime += dt;
         bool wasGrounded = IsGrounded;
+        if (!wasGrounded) airborneTime += dt;
         IsGrounded = verticalSpeed <= 0 && ProbeGround(groundProbeDistance, out _);
         if (IsGrounded)
         {
@@ -400,6 +412,7 @@ public class PlayerMovements : MonoBehaviour
             jumpRequestUntil = -1;
             jumpConsumed = true;
             IsGrounded = false;
+            Jumped?.Invoke();
         }
 
         float gravity = 2f * jumpHeight / (timeToJumpApex * timeToJumpApex);
@@ -418,8 +431,14 @@ public class PlayerMovements : MonoBehaviour
         Vector3 incomingTravel = Vector3.forward * worldDistancePerStep;
         if (Sweep(incomingTravel, out var front) && front.normal.z < -0.5f)
         {
-            HitFront(front.collider);
-            return;
+            Vector3 queryPosition = transform.position + Vector3.forward * worldQueryOffset;
+            if (TryGetLedgeLift(front.collider, front.point, queryPosition, incomingTravel, out float lift))
+                Move(Vector3.up * lift, 3);
+            else
+            {
+                HitFront(front.collider);
+                return;
+            }
         }
         Move(incomingTravel, 2);
         worldQueryOffset += worldDistancePerStep;
@@ -437,6 +456,9 @@ public class PlayerMovements : MonoBehaviour
                 if (gap > controller.skinWidth) Move(Vector3.down * gap, 3);
                 SupportHeight = support.point.y;
             }
+            // حدث هبوط واحد بعد وقت فعلي في الهواء، وليس مع اهتزاز ملامسة الأرض بين الخطوات.
+            if (!wasGrounded && airborneTime >= .06f) Landed?.Invoke(Mathf.Abs(oldVerticalSpeed));
+            airborneTime = 0;
             verticalSpeed = -groundStickSpeed;
             lastGroundedTime = simulationTime;
             jumpConsumed = false;
@@ -466,7 +488,7 @@ public class PlayerMovements : MonoBehaviour
         {
             float safe = Mathf.Max(0, side.distance - controller.skinWidth);
             Move(Vector3.right * Mathf.Sign(dx) * Mathf.Min(Mathf.Abs(dx), safe), 1);
-            BeginSideBump();
+            BeginSideBump(side.collider, side.point);
         }
         else Move(lateral, 1);
 
@@ -478,7 +500,7 @@ public class PlayerMovements : MonoBehaviour
         if (queued != 0) RequestLaneChange(queued);
     }
 
-    private void BeginSideBump()
+    private void BeginSideBump(Collider obstacle, Vector3 contactPoint)
     {
         if (!changingLane || returningFromBump) return;
         LastSideBumpDirection = Math.Sign(laneX[targetLane] - laneX[currentLane]);
@@ -487,19 +509,18 @@ public class PlayerMovements : MonoBehaviour
         queuedLaneDirection = 0;
         laneSpeed = Mathf.Max(1, Mathf.Abs(transform.position.x - laneX[currentLane]) / bumpReturnDuration);
         SideBumpCount++;
-        OnSideBumpPursuerApproachRequested();
+        // الرجوع يمنع Colliders متعددة لنفس التلامس من إصدار ضربات إضافية؛ محاولة لاحقة تعطي تسلسلًا جديدًا.
+        ImpactDetected?.Invoke(new RunnerImpact(RunnerImpact.Kind.Side, ++impactSequence,
+            LastSideBumpDirection, contactPoint, obstacle));
         SideBumped?.Invoke();
-    }
-
-    private void OnSideBumpPursuerApproachRequested()
-    {
-        // TODO: Bring the pursuer closer here when that system is implemented.
     }
 
     private void HitFront(Collider obstacle)
     {
         if (!IsRunning) return;
-        StopRun("Frontal collision: " + (obstacle ? obstacle.name : "obstacle"));
+        // الصحة هي صاحبة قرار الخسارة؛ الحركة ترسل نوع الاصطدام ومكانه فقط.
+        Vector3 point = obstacle ? obstacle.ClosestPoint(transform.position + Vector3.up) : transform.position + Vector3.up;
+        ImpactDetected?.Invoke(new RunnerImpact(RunnerImpact.Kind.Front, ++impactSequence, 0, point, obstacle));
         FrontalCollision?.Invoke(obstacle);
     }
 
@@ -507,6 +528,7 @@ public class PlayerMovements : MonoBehaviour
     {
         moveAxis = axis;
         moveDirection = displacement;
+        pendingLedgeLift = 0;
         // Resolve each move at the same relative-world position as the sweeps.
         // The offset exists only inside this collision calculation; every public
         // simulation step and rendered frame ends at the captured Z anchor.
@@ -515,9 +537,12 @@ public class PlayerMovements : MonoBehaviour
         transform.position = queryPosition;
         Physics.SyncTransforms();
         var flags = controller.Move(displacement);
+        float ledgeLift = pendingLedgeLift;
         LockForwardPosition();
         if ((flags & CollisionFlags.Above) != 0 && verticalSpeed > 0) verticalSpeed = 0;
         moveAxis = 0;
+        // لا نستدعي Move داخل callback الفيزياء؛ ننفذ رفع الحافة بعد انتهاء الحركة الحالية.
+        if (ledgeLift > 0 && IsRunning) Move(Vector3.up * ledgeLift, 3);
         return flags;
     }
 
@@ -525,8 +550,48 @@ public class PlayerMovements : MonoBehaviour
     {
         if (hit.normal.y >= WalkableNormalY) return;
         if (moveAxis == 1 && Mathf.Abs(hit.normal.x) > 0.5f &&
-            Vector3.Dot(moveDirection, hit.normal) < 0) BeginSideBump();
-        else if (moveAxis == 2 && hit.normal.z < -0.5f) HitFront(hit.collider);
+            Vector3.Dot(moveDirection, hit.normal) < 0) BeginSideBump(hit.collider, hit.point);
+        else if (moveAxis == 2 && hit.normal.z < -0.5f)
+        {
+            if (TryGetLedgeLift(hit.collider, hit.point, transform.position, moveDirection, out float lift))
+                pendingLedgeLift = Mathf.Max(pendingLedgeLift, lift);
+            else HitFront(hit.collider);
+        }
+    }
+
+    /// <summary>يفرق بين حافة تحت القدم وواجهة تصطدم بالجسم، اعتمادًا على سطح فعلي ومساحة خالية.</summary>
+    private bool TryGetLedgeLift(Collider obstacle, Vector3 contact, Vector3 queryPosition,
+        Vector3 forwardTravel, out float lift)
+    {
+        lift = 0;
+        float limit = Mathf.Min(ledgeStepHeight, controller.stepOffset);
+        float feetY = queryPosition.y + feetOffset;
+        float margin = controller.skinWidth * 2f;
+        if (!obstacle || limit <= 0 || contact.y > feetY + limit + margin) return false;
+
+        // نفحص نفس المصادم من الأعلى قرب موضع العبور؛ حدود AABB وحدها لا تثبت وجود سطح قابل للوقوف.
+        float probeZ = Mathf.Max(queryPosition.z + forwardTravel.z, contact.z + margin);
+        var origin = new Vector3(queryPosition.x + controller.center.x, feetY + limit + margin, probeZ);
+        if (!obstacle.Raycast(new Ray(origin, Vector3.down), out var top, limit + margin * 2f) ||
+            top.normal.y < WalkableNormalY) return false;
+        float rise = top.point.y - feetY;
+        if (rise < -margin || rise > limit) return false;
+        lift = Mathf.Max(margin, rise + margin);
+
+        // نمنع مساعدة الحافة إذا لم تتسع الكبسولة فوقها، أو إذا كان هناك سقف يمنع رفع الرأس.
+        Capsule(queryPosition, controller.height, controller.center, out var bottom, out var head);
+        float radius = Mathf.Max(.01f, controller.radius - controller.skinWidth);
+        int count = Physics.CapsuleCastNonAlloc(bottom, head, radius, Vector3.up, castHits,
+            lift, collisionMask, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+            if (!IsSelf(castHits[i].collider) && castHits[i].normal.y < -.01f) return false;
+        Capsule(queryPosition + forwardTravel + Vector3.up * lift,
+            controller.height, controller.center, out bottom, out head);
+        count = Physics.OverlapCapsuleNonAlloc(bottom, head, radius, overlaps,
+            collisionMask, QueryTriggerInteraction.Ignore);
+        if (count == overlaps.Length) return false;
+        for (int i = 0; i < count; i++) if (!IsSelf(overlaps[i])) return false;
+        return true;
     }
 
     private bool Sweep(Vector3 displacement, out RaycastHit nearest)

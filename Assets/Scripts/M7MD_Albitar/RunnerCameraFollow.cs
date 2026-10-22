@@ -24,40 +24,28 @@ public class RunnerCameraFollow : MonoBehaviour
     [SerializeField, Range(0, 3)] private float impactRoll = 0.8f;
     [SerializeField, Range(0.05f, 0.5f)] private float impactDuration = 0.22f;
     [SerializeField, Range(1, 30)] private float impactFrequency = 12f;
-    private PlayerMovements subscribedTarget;
     private CinemachineFollow follow;
-    private float originX, fixedZ, impactAge = 100f, impactDirection = 1f;
+    private float originX, fixedZ, impactAge = 100f, impactDirection = 1f, impactStrength = 1f;
     private bool initialized, sessionPaused;
     public bool IsImpactActive => impactAge < impactDuration;
     public Vector3 ImpactOffset { get; private set; }
     public float ImpactRoll { get; private set; }
 
-    private void OnEnable() => BindTarget();
-    private void OnDisable() { UnbindTarget(); initialized = false; }
+    private void OnDisable() { initialized = false; }
     private void Start() { if (!initialized) SnapToTarget(); }
-    private void BindTarget()
-    {
-        if (subscribedTarget == target) return;
-        UnbindTarget(); subscribedTarget = target;
-        if (subscribedTarget) subscribedTarget.SideBumped += OnSideBumped;
-    }
-    private void UnbindTarget()
-    {
-        if (subscribedTarget) subscribedTarget.SideBumped -= OnSideBumped;
-        subscribedTarget = null;
-    }
-    public void SetTarget(PlayerMovements player) { target = player; BindTarget(); initialized = false; }
+    public void SetTarget(PlayerMovements player) { target = player; initialized = false; }
     public void SetSessionPaused(bool value) => sessionPaused = value;
-    private void OnSideBumped()
+    // المؤثرات تستدعي الهزة مرة واحدة بعد اعتماد الضرر، بدل اشتراك ثانٍ بالاصطدام.
+    public void PlayImpact(int direction, float strength = 1f)
     {
         impactAge = 0;
-        impactDirection = target.LastSideBumpDirection == 0 ? 1 : target.LastSideBumpDirection;
+        impactDirection = direction == 0 ? 1 : direction;
+        impactStrength = Mathf.Clamp(strength, 0, 2);
     }
 
     public void SnapToTarget()
     {
         if (!target || !virtualCamera || !brain || !trackingAnchor) return;
-        BindTarget();
         originX = target.transform.position.x;
         fixedZ = target.transform.position.z;
         impactAge = 100f; ImpactOffset = Vector3.zero; ImpactRoll = 0;
@@ -112,7 +100,7 @@ public class RunnerCameraFollow : MonoBehaviour
         {
             impactAge = Mathf.Min(impactDuration, impactAge + deltaTime);
             float envelope = 1 - impactAge / impactDuration;
-            wave = Mathf.Sin(impactAge * impactFrequency * Mathf.PI * 2) * envelope * envelope * impactDirection;
+            wave = Mathf.Sin(impactAge * impactFrequency * Mathf.PI * 2) * envelope * envelope * impactDirection * impactStrength;
         }
         ImpactOffset = Vector3.right * (wave * impactAmplitude);
         ImpactRoll = -wave * impactRoll;
