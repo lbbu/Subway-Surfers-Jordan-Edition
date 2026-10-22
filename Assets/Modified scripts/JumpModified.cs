@@ -4,6 +4,7 @@ using UnityEngine;
 public class JumpModified : MonoBehaviour
 {
     public float jumpHeight = 2f;
+    public float jumpForce = 10f;
     public float timeToJumpApex = 0.4f;
 
     private float gravity;
@@ -93,8 +94,17 @@ public class JumpModified : MonoBehaviour
 
     private void CalculateGravityAndJumpVelocity()
     {
-        gravity = -(2 * jumpHeight) / Mathf.Pow(timeToJumpApex, 2);
-        jumpVelocity = Mathf.Abs(gravity) * timeToJumpApex;
+
+        #region Modified Jump (AHMEDJ)
+
+
+
+        #endregion
+
+        #region old Jump and gravity
+        gravity = -9.8f;
+        jumpVelocity = Mathf.Sqrt(2f * Mathf.Abs(gravity) * jumpHeight);
+        #endregion
     }
 
     private void HandleJumpInput()
