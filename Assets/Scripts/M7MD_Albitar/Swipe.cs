@@ -23,6 +23,15 @@ public class Swipe : MonoBehaviour
     private bool consumed;
     private readonly List<RaycastResult> uiHits = new List<RaycastResult>();
     public Vector2 StartTouch => startTouch;
+    public bool GameplayEnabled => gameplayEnabled;
+    private bool gameplayEnabled = true;
+
+    /// <summary>تبديل استقبال اللعب يلغي اللمسة القديمة حتى لا تُنفذ بعد الاستكمال أو إعادة الجولة.</summary>
+    public void SetGameplayEnabled(bool value)
+    {
+        gameplayEnabled = value;
+        CancelGesture();
+    }
 
     private void OnEnable()
     {
@@ -42,6 +51,7 @@ public class Swipe : MonoBehaviour
 
     private void Update()
     {
+        if (!gameplayEnabled) return;
 #if ENABLE_LEGACY_INPUT_MANAGER
         if (Input.touchCount > 0)
         {
@@ -155,6 +165,7 @@ public class Swipe : MonoBehaviour
 
     private void Emit(int direction)
     {
+        if (!gameplayEnabled) return;
         switch (direction)
         {
             case 0: OnSwipeUp?.Invoke(this, EventArgs.Empty); break;
@@ -171,3 +182,4 @@ public class Swipe : MonoBehaviour
         consumed = false;
     }
 }
+

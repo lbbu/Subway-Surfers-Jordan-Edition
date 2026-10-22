@@ -1,8 +1,9 @@
 using System;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.Serialization;
 
-/// <summary>Anchored runner: the world moves along -Z; this component owns X/Y motion.</summary>
+/// <summary>حركة اللاعب واصطدامه على X وY، بينما يتحرك العالم للخلف ويبقى موضع Z ثابتًا.</summary>
 [DefaultExecutionOrder(100)]
 [DisallowMultipleComponent]
 [RequireComponent(typeof(CharacterController))]
@@ -12,8 +13,10 @@ public class PlayerMovements : MonoBehaviour
 
     [Header("Moving world (player Z stays at its spawn position)")]
     [Tooltip("Optional. Reads speed only; never moves, accelerates, or edits the manager.")]
-    [SerializeField] private ChunkManager worldSpeedSource;
-    [SerializeField] private bool readChunkManagerSpeed = true;
+    [SerializeField] private RunnerWorldSource worldSpeedSource;
+    [FormerlySerializedAs("readChunkManagerSpeed")]
+    [SerializeField] private bool readWorldSpeed = true;
+    [SerializeField] private Swipe inputSource;
     [SerializeField] private bool startAutomatically = true;
     [SerializeField] private float fallOutHeight = -10f;
 
@@ -73,14 +76,13 @@ public class PlayerMovements : MonoBehaviour
     [Tooltip("Existing clip reference used only to fit its playback speed to slideDuration.")]
     [SerializeField] private AnimationClip slideAnimationClip;
 
-    // Kept for compatibility with existing callers.
-    public static bool isAllowToMove;
-    public static bool isSliding;
+    // حالة الحركة تخص هذا اللاعب وحده؛ لا توجد أعلام static تتسرب بين الجولات أو اللاعبين.
 
     public MovementState State { get; private set; }
     public bool IsGrounded { get; private set; }
     public bool IsSliding => sliding;
-    public bool IsRunning => running && isAllowToMove;
+    public bool IsRunning => running && !paused;
+    public bool IsPaused => paused;
     public float CurrentSpeed { get; private set; }
     public float VerticalSpeed => verticalSpeed;
     public float SupportHeight { get; private set; }
@@ -92,6 +94,7 @@ public class PlayerMovements : MonoBehaviour
     public float FixedZ => fixedZ;
     public float FallAnimationWeight => animationBlender != null ? animationBlender.FallWeight : 0f;
     public string StopReason { get; private set; }
+    public event Action<string> RunStopped;
     public event Action SideBumped;
     public event Action<Collider> FrontalCollision;
     public event Action<MovementState> StateChanged;
@@ -109,7 +112,7 @@ public class PlayerMovements : MonoBehaviour
     private int moveAxis;
     private Vector3 moveDirection;
     private int lastAnimationHash;
-    private bool initialized;
+    private bool initialized, paused;
     private float fixedZ, worldQueryOffset, worldDistancePerStep;
     private RunnerAnimationBlender animationBlender;
     private bool jumpAnimationActive;
@@ -166,24 +169,67 @@ public class PlayerMovements : MonoBehaviour
     private void Update()
     {
         BindInput();
-        animationBlender?.Tick(Time.deltaTime);
+        if (!paused) animationBlender?.Tick(Time.deltaTime);
     }
 
-    // ChunkManager moves in FixedUpdate at the default order. Sample its new positions
-    // afterwards, including all fixed ticks when rendering is slower than physics.
+    // مصدر العالم يتحرك أولًا، ثم يقرأ اللاعب مسافة الخطوة لمعالجة الاصطدام النسبي.
     private void FixedUpdate()
     {
-        var source = worldSpeedSource ? worldSpeedSource : ChunkManager.instance;
-        float distance = readChunkManagerSpeed && source && source.isActiveAndEnabled
-            ? Mathf.Max(0f, source.chunksSpeed) * Time.fixedDeltaTime : 0f;
+        float distance = readWorldSpeed && worldSpeedSource ? worldSpeedSource.StepDistance : 0f;
         SimulateMovingWorld(Time.fixedDeltaTime, distance);
+    }
+
+    /// <summary>حقن مراجع الجولة بدل البحث عن مدير ماب أو إدخال عام داخل الحركة.</summary>
+    public void ConfigureSession(Swipe source, RunnerWorldSource world)
+    {
+        startAutomatically = false;
+        inputSource = source;
+        worldSpeedSource = world;
+        BindInput();
+    }
+
+    /// <summary>إعادة إنشاء موارد الأنيميشن عند دخول Play حتى مع تعطيل Domain Reload.</summary>
+    public void ReinitializeForSession()
+    {
+        UnbindInput();
+        animationBlender?.Dispose();
+        animationBlender = null;
+        initialized = false;
+        paused = false;
+        Initialize();
+        BindInput();
+    }
+
+    /// <summary>الإيقاف المؤقت يحفظ مسار القفزة والزحلقة، لكنه يلغي الأوامر المخزنة.</summary>
+    public void SetPaused(bool value)
+    {
+        if (paused == value) return;
+        paused = value;
+        jumpRequestUntil = -1f;
+        queuedLaneDirection = 0;
+        if (paused) animationBlender?.Pause();
+        else animationBlender?.Resume();
+    }
+
+    /// <summary>إعادة موضع اللاعب مع تعطيل الـController لحظة النقل لتجنب دفعه بواسطة عائق قديم.</summary>
+    public void Respawn(Vector3 position, Quaternion rotation, bool beginRunning)
+    {
+        Initialize();
+        bool controllerWasEnabled = controller.enabled;
+        controller.enabled = false;
+        RestoreStandingShape();
+        transform.SetPositionAndRotation(position, rotation);
+        controller.enabled = controllerWasEnabled;
+        Physics.SyncTransforms();
+        ResetRun(beginRunning);
     }
 
     private void BindInput()
     {
-        if (input == Swipe.Instance) return;
+        var desiredInput = inputSource ? inputSource : Swipe.Instance;
+        if (input == desiredInput) return;
         UnbindInput();
-        input = Swipe.Instance;
+        input = desiredInput;
         if (!input) return;
         input.OnSwipeUp += HandleUp;
         input.OnSwipeDown += HandleDown;
@@ -210,6 +256,8 @@ public class PlayerMovements : MonoBehaviour
     public void ResetRun(bool beginRunning = true)
     {
         if (!initialized) return;
+        paused = false;
+        animationBlender?.Resume();
         RestoreStandingShape();
         currentLane = NearestLane(transform.position.x);
         targetLane = currentLane;
@@ -217,7 +265,7 @@ public class PlayerMovements : MonoBehaviour
         laneSpeed = Mathf.Abs(transform.position.x - laneX[currentLane]) / laneChangeDuration;
         returningFromBump = false;
         queuedLaneDirection = 0;
-        sliding = isSliding = false;
+        sliding = false;
         verticalSpeed = simulationTime = slideRemaining = 0;
         jumpRequestUntil = -1;
         lastGroundedTime = -10;
@@ -225,7 +273,7 @@ public class PlayerMovements : MonoBehaviour
         CurrentSpeed = 0f;
         fixedZ = transform.position.z;
         worldQueryOffset = 0f;
-        running = isAllowToMove = beginRunning;
+        running = beginRunning;
         StopReason = "";
         SideBumpCount = 0;
         LastSideBumpDirection = 0;
@@ -247,7 +295,7 @@ public class PlayerMovements : MonoBehaviour
     {
         if (!IsRunning || sliding) return;
         jumpRequestUntil = -1;
-        sliding = isSliding = true;
+        sliding = true;
         slideRemaining = slideDuration;
         SetHeight(Mathf.Clamp(slideColliderHeight, controller.radius * 2f, standingHeight));
         if (!IsGrounded)
@@ -272,12 +320,15 @@ public class PlayerMovements : MonoBehaviour
     public void StopRun(string reason = "Stopped")
     {
         if (!running) return;
-        running = isAllowToMove = false;
+        paused = false;
+        animationBlender?.Resume();
+        running = false;
         CurrentSpeed = verticalSpeed = 0;
         queuedLaneDirection = 0;
         jumpRequestUntil = -1;
         StopReason = reason;
         SetState(MovementState.Stopped);
+        RunStopped?.Invoke(reason);
         onRunStopped.Invoke();
     }
 
@@ -341,7 +392,7 @@ public class PlayerMovements : MonoBehaviour
             (IsGrounded || simulationTime - lastGroundedTime <= coyoteTime) &&
             (!sliding || CanStand()))
         {
-            sliding = isSliding = false;
+            sliding = false;
             RestoreStandingShape();
             verticalSpeed = 2f * jumpHeight / timeToJumpApex;
             jumpAnimationActive = true;
@@ -399,7 +450,7 @@ public class PlayerMovements : MonoBehaviour
             slideRemaining -= dt;
             if (slideRemaining <= 0 && CanStand())
             {
-                sliding = isSliding = false;
+                sliding = false;
                 RestoreStandingShape();
             }
         }
@@ -650,7 +701,7 @@ public class PlayerMovements : MonoBehaviour
 
 #if UNITY_EDITOR
     /// <summary>Evaluate the same animation graph used in play on a temporary preview rig.</summary>
-    public void PreviewAnimation(float deltaTime) => animationBlender?.EvaluatePreview(deltaTime);
+    public void PreviewAnimation(float deltaTime) => animationBlender?.EvaluatePreview(paused ? 0f : deltaTime);
 #endif
 
     // Existing clip event: animation cannot override slide clearance or airborne physics.
@@ -671,3 +722,4 @@ public class PlayerMovements : MonoBehaviour
         terminalFallSpeed = Mathf.Max(1, terminalFallSpeed);
     }
 }
+

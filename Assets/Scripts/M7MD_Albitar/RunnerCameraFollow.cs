@@ -25,7 +25,7 @@ public class RunnerCameraFollow : MonoBehaviour
 
     private float originX, fixedCameraZ, baseY, xVelocity, yVelocity;
     private Vector3 followPosition;
-    private bool initialized;
+    private bool initialized, sessionPaused;
     private PlayerMovements subscribedTarget;
     private Camera cameraComponent;
     private float impactAge = 100f, impactDirection = 1f;
@@ -48,6 +48,17 @@ public class RunnerCameraFollow : MonoBehaviour
         if (subscribedTarget) subscribedTarget.SideBumped -= OnSideBumped;
         subscribedTarget = null;
     }
+
+    /// <summary>الجولة تحدد هدف الكاميرا صراحة، مع فك الاشتراك عن الهدف السابق.</summary>
+    public void SetTarget(PlayerMovements player)
+    {
+        target = player;
+        BindTarget();
+        initialized = false;
+    }
+
+    // تجميد حركة الكاميرا ومؤقت الهزة دون تغيير الزمن العام للتطبيق.
+    public void SetSessionPaused(bool value) => sessionPaused = value;
 
     private void OnSideBumped()
     {
@@ -76,7 +87,7 @@ public class RunnerCameraFollow : MonoBehaviour
     /// <summary>Manual equivalent of LateUpdate for deterministic framing checks.</summary>
     public void SimulateFollow(float deltaTime)
     {
-        if (!target || deltaTime <= 0) return;
+        if (sessionPaused || !target || deltaTime <= 0) return;
         BindTarget();
         if (!initialized) SnapToTarget();
         Vector3 player = target.transform.position;
@@ -115,3 +126,4 @@ public class RunnerCameraFollow : MonoBehaviour
             Quaternion.Euler(pitch, 0, -wave * impactRoll));
     }
 }
+

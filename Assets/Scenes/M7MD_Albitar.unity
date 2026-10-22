@@ -1394,9 +1394,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cc5919b729fe7144b0a7464faf5c699, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMovements
-  worldSpeedSource: {fileID: 1541230130}
-  readChunkManagerSpeed: 1
-  startAutomatically: 1
+  worldSpeedSource: {fileID: 1862880744}
+  readWorldSpeed: 1
+  inputSource: {fileID: 196758382}
+  startAutomatically: 0
   fallOutHeight: -10
   laneX:
   - -5
@@ -4319,6 +4320,70 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4130648890340849706, guid: bc3823d1088d3064187f73a3756cf910, type: 3}
   m_PrefabInstance: {fileID: 1790447479}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1862880742
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1862880745}
+  - component: {fileID: 1862880744}
+  - component: {fileID: 1862880743}
+  m_Layer: 0
+  m_Name: Run Session
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1862880743
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1862880742}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6f6e305bc5012342a7ebb96c79847d3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RunSession
+  player: {fileID: 610961207}
+  input: {fileID: 196758382}
+  runnerCamera: {fileID: 330585549}
+  world: {fileID: 1862880744}
+  startAutomatically: 1
+  desktopSessionControls: 1
+--- !u!114 &1862880744
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1862880742}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 91bcc14303f851941b1e3c16e5569ba7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LegacyChunkSessionBridge
+  source: {fileID: 1541230130}
+--- !u!4 &1862880745
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1862880742}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1864000208
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -8189,3 +8254,4 @@ SceneRoots:
   - {fileID: 1407377147}
   - {fileID: 2096301446}
   - {fileID: 2089073045}
+  - {fileID: 1862880745}
