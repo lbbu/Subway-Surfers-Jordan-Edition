@@ -7,6 +7,7 @@ public sealed class RunnerTrackWorld : RunnerWorldSource
 {
     [SerializeField] private RunnerTrackSegment[] segments;
     [SerializeField] private RunnerCoinPool coins;
+    [SerializeField] private RunnerPatternDirector patterns;
     [SerializeField, Min(0)] private float initialSpeed = 5f;
     [SerializeField, Min(0)] private float acceleration = 0.1f;
     [SerializeField, Min(1)] private float maximumSpeed = 35f;
@@ -22,6 +23,24 @@ public sealed class RunnerTrackWorld : RunnerWorldSource
     public double DistanceTravelled { get; private set; }
     public int RecycleCount { get; private set; }
     public IReadOnlyList<RunnerTrackSegment> OrderedSegments => ordered;
+
+    // نتوقع سرعة الوصول إلى بداية القوس بدل استخدام سرعة توليد القطعة البعيدة.
+    public float PredictSpeedAfterDistance(float distance)
+    {
+        float current = Mathf.Clamp(speed, 0f, maximumSpeed);
+        return Mathf.Min(maximumSpeed, Mathf.Sqrt(current * current + 2f * acceleration * Mathf.Max(0f, distance)));
+    }
+
+    // المسافة خلال زمن القفزة، مع تقسيم الرحلة عند بلوغ حد السرعة.
+    public float PredictTravelDistance(float seconds, float startingSpeed)
+    {
+        seconds = Mathf.Max(0f, seconds);
+        startingSpeed = Mathf.Clamp(startingSpeed, 0f, maximumSpeed);
+        if (acceleration <= 0f) return startingSpeed * seconds;
+        float acceleratingTime = Mathf.Min(seconds, (maximumSpeed - startingSpeed) / acceleration);
+        return startingSpeed * acceleratingTime + .5f * acceleration * acceleratingTime * acceleratingTime
+            + maximumSpeed * (seconds - acceleratingTime);
+    }
 
     public override void CaptureInitialState()
     {
@@ -66,6 +85,7 @@ public sealed class RunnerTrackWorld : RunnerWorldSource
         ordered.Sort((a, b) => a.StartZ.CompareTo(b.StartZ));
         // ربط البداية بالنهاية يدعم قطعًا بأطوال مختلفة وتعديل طول القطع من Inspector.
         for (int i = 1; i < ordered.Count; i++) ordered[i].PlaceStartAt(ordered[i - 1].EndZ);
+        if (patterns && patterns.isActiveAndEnabled) { patterns.ResetSequence(); foreach (var segment in ordered) patterns.Prepare(segment, 0, maximumSpeed); }
         if (coins)
         {
             coins.ResetCounter();
@@ -100,6 +120,7 @@ public sealed class RunnerTrackWorld : RunnerWorldSource
             segment.PlaceStartAt(nextStart);
             ordered.Add(segment);
             RecycleCount++;
+            if (patterns && patterns.isActiveAndEnabled) patterns.Prepare(segment, DistanceTravelled, maximumSpeed);
             if (coins) coins.Populate(segment);
         }
         Physics.SyncTransforms();

@@ -256,6 +256,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 10
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1 &93185409
 GameObject:
   m_ObjectHideFlags: 0
@@ -607,6 +608,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 8
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -1358,6 +1360,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 8
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1 &526875523
 GameObject:
   m_ObjectHideFlags: 0
@@ -2375,6 +2378,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 10
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1 &862324016
 GameObject:
   m_ObjectHideFlags: 0
@@ -2823,6 +2827,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 8
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1001 &983748848
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3188,6 +3193,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 10
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1 &1114747144
 GameObject:
   m_ObjectHideFlags: 0
@@ -3547,6 +3553,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 10
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1 &1177559503 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 6342842300102627135, guid: 5308683a422692643a4a18db45035b1d, type: 3}
@@ -3569,6 +3576,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 8
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1 &1190608625 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 6342842300102627135, guid: 5308683a422692643a4a18db45035b1d, type: 3}
@@ -3591,6 +3599,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 8
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1001 &1191265299
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3675,6 +3684,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 10
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1001 &1223247584
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4134,6 +4144,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 10
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1 &1407377146
 GameObject:
   m_ObjectHideFlags: 0
@@ -4436,6 +4447,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 8
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1 &1512478291
 GameObject:
   m_ObjectHideFlags: 0
@@ -4522,6 +4534,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 8
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1001 &1560929183
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4611,6 +4624,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 10
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1001 &1599911987
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -5124,6 +5138,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 8
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1 &1819432125 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 6342842300102627135, guid: 5308683a422692643a4a18db45035b1d, type: 3}
@@ -5146,6 +5161,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 8
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!65 &1822063768 stripped
 BoxCollider:
   m_CorrespondingSourceObject: {fileID: 4289248182128547096, guid: d07673a7548f14740b3f5c1320b5613b, type: 3}
@@ -5163,6 +5179,11 @@ GameObject:
   - component: {fileID: 1862880743}
   - component: {fileID: 1862880747}
   - component: {fileID: 1862880746}
+  - component: {fileID: 1862880753}
+  - component: {fileID: 1862880752}
+  - component: {fileID: 1862880751}
+  - component: {fileID: 1862880750}
+  - component: {fileID: 1862880749}
   m_Layer: 0
   m_Name: Run Session
   m_TagString: Untagged
@@ -5188,7 +5209,7 @@ MonoBehaviour:
   world: {fileID: 1862880746}
   health: {fileID: 610961215}
   feedback: {fileID: 610961213}
-  startAutomatically: 1
+  startAutomatically: 0
   desktopSessionControls: 1
 --- !u!4 &1862880745
 Transform:
@@ -5228,6 +5249,7 @@ MonoBehaviour:
   - {fileID: 2096301447}
   - {fileID: 2089073046}
   coins: {fileID: 1862880747}
+  patterns: {fileID: 0}
   initialSpeed: 5
   acceleration: 0.1
   maximumSpeed: 35
@@ -5245,6 +5267,175 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RunnerCoinPool
   prefab: {fileID: 40135657604957409, guid: 389d2f12eba6e874ca7248871218ae20, type: 3}
+  session: {fileID: 1862880743}
+  player: {fileID: 610961207}
+  world: {fileID: 1862880746}
+  prewarmCount: 1100
+--- !u!82 &1862880749
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1862880742}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 0}
+  m_Resource: {fileID: 0}
+  m_PlayOnAwake: 0
+  m_Volume: 1
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 0
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 1
+  MinDistance: 1
+  MaxDistance: 500
+  Pan2D: 0
+  rolloffMode: 0
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  reverbZoneMixCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!114 &1862880750
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1862880742}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36862da789202ec44b858ba0b4dd6313, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RunHUD
+  session: {fileID: 1862880743}
+  score: {fileID: 1862880753}
+  health: {fileID: 610961215}
+  settings: {fileID: 1862880752}
+--- !u!114 &1862880751
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1862880742}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c68b3eb1b11d2e34d96d217c5079a1a4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RunnerCoinFeedback
+  coins: {fileID: 1862880747}
+  session: {fileID: 1862880743}
+  burstPrefab: {fileID: 8674864005182311096, guid: b007b614211ad9546ade862283774e19, type: 3}
+  audioSource: {fileID: 1862880749}
+  collectSound: {fileID: 8300000, guid: a2de76874baab1c4eafa41420fea736a, type: 3}
+--- !u!114 &1862880752
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1862880742}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 983861f1a3ec5ef4383c511037b9a912, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RunnerSettings
+  feedback: {fileID: 610961213}
+  audioSources:
+  - {fileID: 1862880749}
+  - {fileID: 610961214}
+  keyPrefix: JordanRunner.M7MD.
+--- !u!114 &1862880753
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1862880742}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1c9dd64caa257174c8a966398029fc03, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RunScore
+  session: {fileID: 1862880743}
+  world: {fileID: 1862880746}
+  coins: {fileID: 1862880747}
+  pointsPerMetre: 1
+  pointsPerCoin: 10
+  saveKey: JordanRunner.M7MD.BestScore
 --- !u!1001 &1864000208
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -5708,6 +5899,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 10
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1001 &2073204384
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -6039,6 +6231,7 @@ MonoBehaviour:
   spacing: 1.5
   archLength: 10
   archHeight: 3
+  matchPlayerJump: 1
 --- !u!1001 &2110966272
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -48,6 +48,8 @@ public sealed class PlayerFeedback : MonoBehaviour
         if (session) { session.RunPrepared -= ResetFeedback; session.StateChanged -= OnSessionState; }
         bound = false;
     }
+    public void SetAccessibility(float shake, bool haptics) { cameraShakeScale = Mathf.Clamp01(shake); enableHaptics = haptics; }
+
     public void ResetFeedback()
     {
         impactAge = 100; slideTimer = lean = 0;

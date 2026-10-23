@@ -74,6 +74,9 @@ public sealed class RunSession : MonoBehaviour
         player.ReinitializeForSession();
         health.Configure(player, this);
         if (feedback) feedback.Initialize();
+        var score = GetComponent<RunScore>(); if (score) score.Initialize();
+        var settings = GetComponent<RunnerSettings>(); if (settings) settings.Load();
+        var coinFeedback = GetComponent<RunnerCoinFeedback>(); if (coinFeedback) coinFeedback.Initialize();
         initialized = true;
         Subscribe();
         PrepareRun();

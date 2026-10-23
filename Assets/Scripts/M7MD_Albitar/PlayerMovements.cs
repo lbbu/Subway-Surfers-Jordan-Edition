@@ -126,6 +126,36 @@ public class PlayerMovements : MonoBehaviour
     private bool jumpAnimationActive;
     private float jumpAnimationEndTime;
     private RunnerAnimationBlender.Motion lastAnimationMotion;
+    // وصف القفزة للعملات فقط؛ لا يغيّر حركة اللاعب أو معالجة الاصطدام.
+    public float JumpArcDuration
+    {
+        get
+        {
+            float fallingGravity = 2f * jumpHeight * fallMultiplier / (timeToJumpApex * timeToJumpApex);
+            float terminalTime = terminalFallSpeed / fallingGravity;
+            float terminalDistance = .5f * fallingGravity * terminalTime * terminalTime;
+            float descentTime = jumpHeight <= terminalDistance
+                ? Mathf.Sqrt(2f * jumpHeight / fallingGravity)
+                : terminalTime + (jumpHeight - terminalDistance) / terminalFallSpeed;
+            return timeToJumpApex + descentTime;
+        }
+    }
+
+    // ارتفاع القدم فوق نقطة الإقلاع، بنفس جاذبية الصعود والسقوط وسرعة السقوط القصوى.
+    public float JumpArcHeight(float elapsed)
+    {
+        float gravity = 2f * jumpHeight / (timeToJumpApex * timeToJumpApex);
+        if (elapsed <= timeToJumpApex)
+            return Mathf.Max(0f, gravity * timeToJumpApex * elapsed - .5f * gravity * elapsed * elapsed);
+
+        float fallingGravity = gravity * fallMultiplier;
+        float fallingTime = elapsed - timeToJumpApex;
+        float acceleratingTime = Mathf.Min(fallingTime, terminalFallSpeed / fallingGravity);
+        float drop = .5f * fallingGravity * acceleratingTime * acceleratingTime
+            + terminalFallSpeed * (fallingTime - acceleratingTime);
+        return Mathf.Max(0f, jumpHeight - drop);
+    }
+
     private float JumpFlightTime => timeToJumpApex * (1f + 1f / Mathf.Sqrt(fallMultiplier));
     private float WalkableNormalY => Mathf.Cos(controller.slopeLimit * Mathf.Deg2Rad);
 
