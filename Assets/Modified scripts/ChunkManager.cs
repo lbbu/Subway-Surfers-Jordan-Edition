@@ -21,15 +21,18 @@ public class ChunkManager : MonoBehaviour
 
     public List<GameObject> Chunks = new();
     public List<GameObject> loadedChunks = new();
-
+    public int activeChunk = 5;
     public float chunksSpeed = 10.0f;
+    public float accelarate = 0.1f;
+
     private void FixedUpdate()
     {
-        chunksSpeed += 0.01f * Time.deltaTime;
+        chunksSpeed += accelarate * Time.deltaTime;
         float movement = chunksSpeed * Time.fixedDeltaTime;
-        if (loadedChunks.Count < 6)
+        if (loadedChunks.Count < activeChunk + 1)
         {
-            
+            if (Chunks.Count <= 0) return;
+
             int indx = Random.Range(0, Chunks.Count - 1);
             Debug.Log($"{indx}");
             GameObject obj = Chunks[indx];
