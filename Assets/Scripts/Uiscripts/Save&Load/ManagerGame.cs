@@ -7,8 +7,8 @@ public class ManagerGame : MonoBehaviour
 {
     [Header("File storage config")]
     [SerializeField] private string fileName;//مكان تخزين ملف الحفض
-
-    private GameData gamedata;
+  public GameData gamedata;
+  
 
     private List<IGameData> datapresistanceObject;
     private FileDatahandle datahandler;

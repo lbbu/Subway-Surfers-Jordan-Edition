@@ -6,9 +6,10 @@ using System.Collections.Generic;
 public class Item : ScriptableObject
 
 {
+
 public string itemName;
- [SerializeField] private string itemID;
-   [SerializeField] private Sprite itemImage;
-        [SerializeField] private GameObject itemPrefab;
+public string itemIDName;
+public Sprite itemImage;
+     public GameObject itemPrefab;
       public  int itemPrice;
 }

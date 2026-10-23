@@ -2,22 +2,28 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Data.Common;
+using Unity.VisualScripting;
 
 public class ShopItem : MonoBehaviour
 {
-  
+     public List<Item> items=new();
  
     [Header("Items")]
-    [SerializeField] private List<Item> items = new List<Item>();
+    
 
     [Header("UI")]
-    [SerializeField] private Button[] buyButtons;
+    [SerializeField] private List<Button> buyButtons;
     [SerializeField] private TMP_Text[] priceText;
+  
 
-     coins instance_coins;
+
+     private GameData data;
+     public ShopItem instance;
    
    void Start()
     {
+        data = ManagerGame.instance.gamedata;
          ShowPrices();
         SetupButtons();
     }
@@ -32,44 +38,40 @@ public class ShopItem : MonoBehaviour
 
     private void SetupButtons()
     {
-        for (int i = 0; i < buyButtons.Length && i < items.Count; i++)
+       for(int i=0; i<items.Count; i++)
         {
-            int itemID = i;
+            if(buyButtons[i]!=null)
+            {
+                Item item =items[i];
 
-            buyButtons[i].onClick.AddListener(
-                () => BuyItem(itemID)
-            );
+             buyButtons[i].onClick.RemoveAllListeners();
+             buyButtons[i].onClick.AddListener(()=>BuyItem(item));
+              
+            }
+
         }
     }
 
-  public  void BuyItem(int itemID)
+  public  void BuyItem(Item item)
     {
-       if(itemID < 0 || itemID >= items.Count)
-        {
-       return;
+        
        
+      
+        if(item!=null)
+        {
+            if(coins.instance.numofcoins>=item.itemPrice)
+            {
+                Inventory.instance.additem( item);
+                coins.instance.SpendCoins(item.itemPrice);
+            }
         }
-      Item selectedItem = items[itemID];
+   
       
         
         
 
 
-Debug.Log("Item Bought: " + selectedItem.itemName
-    + " for " + selectedItem.itemPrice);
            
-    
-    
-       void SaveData(ref GameData data)
-       
-
-    {
-        
     }
-        void LoadData(GameData data)
-    {
-        
-    }
-
-}
+  
 }

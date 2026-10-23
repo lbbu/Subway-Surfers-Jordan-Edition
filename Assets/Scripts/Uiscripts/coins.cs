@@ -1,24 +1,28 @@
 
 using UnityEngine;
 using TMPro;
+using Unity.VisualScripting;
 
 public class coins : MonoBehaviour, IGameData
 {
     private bool collected = false;
+    public static coins instance;
 
     [SerializeField] private TextMeshProUGUI coinText;
-    private int numofcoins = 0;
-
-    private void OnTriggerEnter(Collider combine)
+   public int numofcoins = 0;
+   void Awake()
     {
-        
-
-        if (!collected && combine.CompareTag("coins"))
+        if(instance==null)
         {
-            ++numofcoins;
-            coinText.text = numofcoins.ToString();
+            instance=this;
         }
     }
+public void addcoin()
+    {
+        numofcoins++;
+        Debug.Log($"coins={numofcoins}");
+
+           }
 
     public int GetCoins()
     {
