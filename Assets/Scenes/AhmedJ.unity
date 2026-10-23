@@ -301,6 +301,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Swipe
   deadZone: 125
+  maximumGestureTime: 0.7
+  ignoreGesturesStartingOverUI: 1
+  desktopTestControls: 1
 --- !u!4 &196758383
 Transform:
   m_ObjectHideFlags: 0
@@ -3738,6 +3741,37 @@ Transform:
   - {fileID: 74193988}
   - {fileID: 232996807}
   m_Father: {fileID: 1370478336}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1575140477
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1575140478}
+  m_Layer: 0
+  m_Name: Bridge
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1575140478
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1575140477}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 21.6, y: 4.8326, z: 6.27}
+  m_LocalScale: {x: 0.47315595, y: 0.3326696, z: 0.3326696}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &1582792744 stripped
 Transform:
@@ -18278,3 +18312,4 @@ SceneRoots:
   - {fileID: 1569908359}
   - {fileID: 1357627636}
   - {fileID: 494247554}
+  - {fileID: 1575140478}
