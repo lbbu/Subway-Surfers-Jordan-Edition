@@ -40,18 +40,19 @@ public class RunnerCameraFollow : MonoBehaviour
         if (subscribedTarget == target) return;
         UnbindTarget();
         subscribedTarget = target;
-        if (subscribedTarget) subscribedTarget.SideBumped += OnSideBumped;
+        //if (subscribedTarget)
+            //subscribedTarget.SideBumped += OnSideBumped;
     }
 
     private void UnbindTarget()
     {
-        if (subscribedTarget) subscribedTarget.SideBumped -= OnSideBumped;
+        if (subscribedTarget) //subscribedTarget.SideBumped -= OnSideBumped;
         subscribedTarget = null;
     }
 
     private void OnSideBumped()
     {
-        impactDirection = target.LastSideBumpDirection == 0 ? 1 : target.LastSideBumpDirection;
+        //impactDirection = target.LastSideBumpDirection == 0 ? 1 : target.LastSideBumpDirection;
         impactAge = 0f; // Replace a previous impulse, never accumulate unlimited shake.
     }
 
@@ -61,7 +62,7 @@ public class RunnerCameraFollow : MonoBehaviour
         BindTarget();
         originX = target.transform.position.x;
         fixedCameraZ = target.transform.position.z + offset.z;
-        baseY = target.SupportHeight;
+        //baseY = target.SupportHeight;
         xVelocity = yVelocity = 0;
         impactAge = 100f;
         followPosition = new Vector3(originX + offset.x, baseY + offset.y, fixedCameraZ);
@@ -80,29 +81,29 @@ public class RunnerCameraFollow : MonoBehaviour
         BindTarget();
         if (!initialized) SnapToTarget();
         Vector3 player = target.transform.position;
-        baseY = Mathf.SmoothDamp(baseY, target.SupportHeight, ref yVelocity,
-            verticalSmoothTime, Mathf.Infinity, deltaTime);
+        //baseY = Mathf.SmoothDamp(baseY, target.SupportHeight, ref yVelocity,
+        //    verticalSmoothTime, Mathf.Infinity, deltaTime);
         float desiredX = originX + (player.x - originX) * lateralFollow + offset.x;
         float x = Mathf.SmoothDamp(followPosition.x, desiredX, ref xVelocity,
             lateralSmoothTime, Mathf.Infinity, deltaTime);
-        float desiredY = baseY + offset.y +
-            Mathf.Max(0, player.y - target.SupportHeight) * airborneVerticalFollow;
-        float y = Mathf.Lerp(followPosition.y, desiredY, 1f - Mathf.Exp(-deltaTime / verticalSmoothTime));
+        //float desiredY = baseY + offset.y +
+            //Mathf.Max(0, player.y - target.SupportHeight) * airborneVerticalFollow;
+        //float y = Mathf.Lerp(followPosition.y, desiredY, 1f - Mathf.Exp(-deltaTime / verticalSmoothTime));
         if (cameraComponent)
         {
             Vector3 forward = Quaternion.Euler(pitch, 0, 0) * Vector3.forward;
-            float depth = Mathf.Max(0.1f, Vector3.Dot(player + Vector3.up -
-                new Vector3(x, y, fixedCameraZ), forward));
-            float halfWidth = depth * Mathf.Tan(cameraComponent.fieldOfView * Mathf.Deg2Rad * 0.5f) *
-                cameraComponent.aspect;
-            float visibleHalfWidth = Mathf.Max(0, halfWidth * (1f - 2f * viewportMargin) -
-                framingPadding - impactAmplitude);
+           // float depth = Mathf.Max(0.1f, Vector3.Dot(player + Vector3.up -
+           //     new Vector3(x, y, fixedCameraZ), forward));
+           // float halfWidth = depth * Mathf.Tan(cameraComponent.fieldOfView * Mathf.Deg2Rad * 0.5f) *
+            //    cameraComponent.aspect;
+           // float visibleHalfWidth = Mathf.Max(0, halfWidth * (1f - 2f * viewportMargin) -
+            //    framingPadding - impactAmplitude);
             // Clamp only the lag that would push the player outside the safe frame.
-            float framedX = Mathf.Clamp(x, player.x - visibleHalfWidth, player.x + visibleHalfWidth);
-            if (!Mathf.Approximately(x, framedX)) xVelocity = 0;
-            x = framedX;
+           // float framedX = Mathf.Clamp(x, player.x - visibleHalfWidth, player.x + visibleHalfWidth);
+           // if (!Mathf.Approximately(x, framedX)) xVelocity = 0;
+           // x = framedX;
         }
-        followPosition = new Vector3(x, y, fixedCameraZ);
+        //followPosition = new Vector3(x, y, fixedCameraZ);
         float wave = 0f;
         if (impactAge < impactDuration)
         {
@@ -111,7 +112,7 @@ public class RunnerCameraFollow : MonoBehaviour
             wave = Mathf.Sin(impactAge * impactFrequency * Mathf.PI * 2f) *
                 envelope * envelope * impactDirection;
         }
-        transform.SetPositionAndRotation(followPosition + Vector3.right * (wave * impactAmplitude),
-            Quaternion.Euler(pitch, 0, -wave * impactRoll));
+       // transform.SetPositionAndRotation(followPosition + Vector3.right * (wave * impactAmplitude),
+       //     Quaternion.Euler(pitch, 0, -wave * impactRoll));
     }
 }
