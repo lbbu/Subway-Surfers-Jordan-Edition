@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 2941810027621261899}
   - component: {fileID: 7011494761270603474}
   - component: {fileID: 949705134805119581}
-  m_Layer: 6
+  m_Layer: 7
   m_Name: Barrier
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -110,5 +110,5 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 2, y: 0.7, z: 1}
-  m_Center: {x: 0, y: 0.4, z: 0}
+  m_Size: {x: 1.782054, y: 0.49370587, z: 1}
+  m_Center: {x: 0.017273044, y: 0.45703292, z: 0}
