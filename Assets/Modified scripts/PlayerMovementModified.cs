@@ -1,8 +1,8 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-using DG.Tweening;
+﻿using DG.Tweening;
 using System;
+using System.Collections;
+using UnityEngine;
+
 
 public class PlayerMovementModified : MonoBehaviour
 {
@@ -48,6 +48,9 @@ public class PlayerMovementModified : MonoBehaviour
     private float originalColliderHeight;
     private Vector3 originalColliderCenter;
 
+
+    Rigidbody[] boneBodies;
+    Collider[] boneColliders;
     private void Awake()
     {
         // جلب المكونات المرتبطة باللاعب تلقائياً إذا لم يتم سحبها في الـ Inspector
@@ -65,10 +68,16 @@ public class PlayerMovementModified : MonoBehaviour
             originalColliderHeight = playerCollider.height;
             originalColliderCenter = playerCollider.center;
         }
+
+        boneBodies = System.Array.FindAll(GetComponentsInChildren<Rigidbody>(), r => r != rb);
+        boneColliders = System.Array.FindAll(GetComponentsInChildren<Collider>(), c => c != playerCollider);
+
+        SetRagdoll(false);
     }
 
     void Start()
     {
+        particle.SetActive(false);
         isAllowToMove = true;
 
         // الاشتراك في أحداث السحب (Swipes) من سكريبت إدارة اللمس
@@ -93,6 +102,92 @@ public class PlayerMovementModified : MonoBehaviour
 
 
     #region Updated Move L,R (AHMED)
+    [SerializeField] float forwardOffset = 0.5f;
+    [SerializeField] float radius = 0.5f;
+    [SerializeField] float height = 2f;
+
+    [SerializeField] float stepHeight = 0.3f;
+    [SerializeField] LayerMask obstacleMask;
+
+    [SerializeField] float stumbleWindow = 2.5f;
+    float stumbleTimer;
+    bool IsStumbling => stumbleTimer > 0f;
+
+    void FixedUpdate()
+    {
+        if (!isAllowToMove) return;
+
+        if (stumbleTimer > 0f) stumbleTimer -= Time.fixedDeltaTime;
+
+        if (FrontHit()) Die();
+    }
+    bool FrontHit()
+    {
+        Vector3 basePos = transform.position + transform.forward * forwardOffset;
+
+        float h = playerCollider.height;
+        Vector3 bottom = basePos + Vector3.up * (stepHeight + radius);
+        Vector3 top = basePos + Vector3.up * Mathf.Max(h - radius, stepHeight + radius);
+
+        return Physics.CheckCapsule(bottom, top, radius, obstacleMask, QueryTriggerInteraction.Ignore);
+    }
+
+    [SerializeField] float sideStepHeight = 0.3f;
+    [SerializeField] float sideRadius = 0.4f;
+
+    bool SideCast(Vector3 dir, float dist, out RaycastHit hit)
+    {
+        Vector3 basePos = rb.position;
+        float h = playerCollider.height; 
+
+        Vector3 bottom = basePos + Vector3.up * (sideStepHeight + sideRadius);
+        Vector3 top = basePos + Vector3.up * Mathf.Max(h - sideRadius, sideStepHeight + sideRadius);
+
+        return Physics.CapsuleCast(bottom, top, sideRadius, dir, out hit, dist,
+                                   whatIsGround, QueryTriggerInteraction.Ignore);
+    }
+    bool OnSideHit()
+    {
+        if (IsStumbling) {  return true; }
+        stumbleTimer = stumbleWindow;
+        playerAnimator.SetTrigger("Stumble");
+        return false;
+
+    }
+    public GameObject particle;
+    void Die()
+    {
+        isAllowToMove = false;
+        laneTween?.Kill();
+
+        playerAnimator.enabled = false;
+        playerCollider.enabled = false;
+        rb.isKinematic = true;
+
+        CameraShakeManager.instance.PlayBump();
+        CameraShakeManager.instance.DeathCamera();
+        SetRagdoll(true);
+
+        foreach (var b in boneBodies)
+            b.linearVelocity = Vector3.forward * ChunkManager.instance.chunksSpeed;
+
+        ChunkManager.instance.chunksSpeed = 0f;
+        ChunkManager.instance.accelarate = 0f;
+        particle.SetActive(true);
+
+    }
+    void SetRagdoll(bool on)
+    {
+        foreach (var b in boneBodies)
+        {
+            b.isKinematic = !on;
+            b.detectCollisions = on;
+        }
+        foreach (var c in boneColliders)
+            c.enabled = on;
+    }
+
+
     // سبب الاستخدام للحرص على وضع قيمة معينة لضمان
     // وجوداللاعب في تلك النقطة دون اي اخطاء
     // و يمكن تغيرها عند تغير حجم الخريطة الاصلي
@@ -130,9 +225,9 @@ public class PlayerMovementModified : MonoBehaviour
         if (hitObsticle)
         {
 
-            if (Physics.Raycast(checkPos.position, rayDic, out RaycastHit hit, laneGap, whatIsGround))
+            if (SideCast(rayDic, laneGap, out RaycastHit hit))
             {
-                
+                bool fatal = OnSideHit();
                 float distance = hit.distance;
                 stubmle = true;
                 Sequence seq = DOTween.Sequence();
@@ -149,11 +244,26 @@ public class PlayerMovementModified : MonoBehaviour
                 Debug.Log($"Hit {hit.collider.gameObject.name} laneGap = {laneGap} distance {hit.distance} outTime = {outTime} backTime {backTime}");
                 seq.Append(rb.DOMoveX(targetX, outTime)
                               .SetEase(Ease.OutQuad)
-                              .SetUpdate(UpdateType.Fixed))
-                   .Append(rb.DOMoveX(homeX, backTime)
-                              .SetEase(Ease.OutQuad)
-                              .SetUpdate(UpdateType.Fixed))
-                   .OnComplete(() => stubmle = false);
+                              .SetUpdate(UpdateType.Fixed));
+                seq.AppendCallback(() =>
+                {
+                    Debug.Log("Bumping");
+                    CameraShakeManager.instance.PlayBump();
+                });
+
+                if (fatal)
+                {
+                    
+                    seq.OnComplete(Die);
+                }
+                else
+                {
+                    seq.Append(rb.DOMoveX(homeX, backTime)
+                                 .SetEase(Ease.OutQuad)
+                                 .SetUpdate(UpdateType.Fixed))
+                       .OnComplete(() => stubmle = false);
+                    
+                }
 
             }
         }
@@ -289,6 +399,62 @@ public class PlayerMovementModified : MonoBehaviour
         {
             playerCollider.height = originalColliderHeight;
             playerCollider.center = originalColliderCenter;
+        }
+    }
+
+    // Claude Debug for side colliders
+    void GetSideCapsule(Vector3 basePos, out Vector3 bottom, out Vector3 top)
+    {
+        float h = playerCollider != null ? playerCollider.height : height;
+        bottom = basePos + Vector3.up * (sideStepHeight + sideRadius);
+        top = basePos + Vector3.up * Mathf.Max(h - sideRadius, sideStepHeight + sideRadius);
+    }
+    void DrawCapsuleGizmo(Vector3 bottom, Vector3 top, float r)
+    {
+        Gizmos.DrawWireSphere(bottom, r);
+        Gizmos.DrawWireSphere(top, r);
+        // four lines connecting the two spheres so it reads as a capsule
+        Gizmos.DrawLine(bottom + Vector3.right * r, top + Vector3.right * r);
+        Gizmos.DrawLine(bottom + Vector3.left * r, top + Vector3.left * r);
+        Gizmos.DrawLine(bottom + Vector3.forward * r, top + Vector3.forward * r);
+        Gizmos.DrawLine(bottom + Vector3.back * r, top + Vector3.back * r);
+    }
+    void OnDrawGizmosSelected()
+    {
+        Vector3 basePos = rb != null ? rb.position : transform.position;
+
+        // current position
+        GetSideCapsule(basePos, out Vector3 b0, out Vector3 t0);
+        Gizmos.color = Color.white;
+        DrawCapsuleGizmo(b0, t0, sideRadius);
+
+        // preview both directions
+        for (int d = -1; d <= 1; d += 2)
+        {
+            int targetLane = Mathf.Clamp(currentLane + d, 0, laneX.Length - 1);
+            if (targetLane == currentLane) continue;   // no lane that way
+
+            float laneGap = Mathf.Abs(laneX[targetLane] - laneX[currentLane]);
+            Vector3 dir = d == 1 ? Vector3.right : Vector3.left;
+
+            bool didHit = Physics.CapsuleCast(b0, t0, sideRadius, dir, out RaycastHit hit,
+                                              laneGap, obstacleMask, QueryTriggerInteraction.Ignore);
+
+            float travel = didHit ? hit.distance : laneGap;
+            Vector3 landPos = basePos + dir * travel;
+
+            GetSideCapsule(landPos, out Vector3 b1, out Vector3 t1);
+
+            Gizmos.color = didHit ? Color.red : Color.green;
+            DrawCapsuleGizmo(b1, t1, sideRadius);
+            Gizmos.DrawLine(b0, b1);   // path of the bottom sphere
+            Gizmos.DrawLine(t0, t1);   // path of the top sphere
+
+            if (didHit)
+            {
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawSphere(hit.point, 0.08f);
+            }
         }
     }
 }

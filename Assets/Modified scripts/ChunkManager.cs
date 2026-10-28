@@ -21,14 +21,52 @@ public class ChunkManager : MonoBehaviour
 
     public List<GameObject> Chunks = new();
     public List<GameObject> loadedChunks = new();
+    public GameObject safeChunk;
     public int activeChunk = 5;
     public float chunksSpeed = 10.0f;
     public float accelarate = 0.1f;
+    public float chunkOffset = 30f;
+    private void Start()
+    {
+        if(loadedChunks.Count <= 0)
+        {
+            LoadStartingChunks();
+        }
+    }
+
+    private void LoadStartingChunks()
+    {
+        for (int i = 0; i < activeChunk + 1; i++)
+        {
+            int indx = Random.Range(0, Chunks.Count - 1);
+            Debug.Log($"{indx}");
+            GameObject obj = Chunks[indx];
+            if(loadedChunks.Count > 0)
+            {
+                Vector3 lastActiveChPos = loadedChunks[loadedChunks.Count - 1].transform.position;
+                loadedChunks.Add(obj);
+                obj.SetActive(true);
+                obj.transform.position = new Vector3(lastActiveChPos.x, lastActiveChPos.y, lastActiveChPos.z + chunkOffset);
+                Chunks.RemoveAt(indx);
+            }
+            else
+            {
+                loadedChunks.Add(obj);
+                obj.SetActive(true);
+                obj.transform.position = new Vector3(0, 0, 30);
+                Chunks.RemoveAt(indx);                
+            }            
+        }
+    }
 
     private void FixedUpdate()
     {
         chunksSpeed += accelarate * Time.deltaTime;
         float movement = chunksSpeed * Time.fixedDeltaTime;
+
+        Debug.Log($" Chunk Add to score {movement}");
+        ScoreManagerModified.instance.UpdateScore(Mathf.RoundToInt(movement * 10));
+
         if (loadedChunks.Count < activeChunk + 1)
         {
             if (Chunks.Count <= 0) return;
@@ -40,8 +78,18 @@ public class ChunkManager : MonoBehaviour
             Vector3 lastActiveChPos = loadedChunks[loadedChunks.Count - 1].transform.position;
             loadedChunks.Add(obj);
             obj.SetActive(true);
-            obj.transform.position = new Vector3 (lastActiveChPos.x, lastActiveChPos.y, lastActiveChPos.z + 30);
+            obj.transform.position = new Vector3 (lastActiveChPos.x, lastActiveChPos.y, lastActiveChPos.z + chunkOffset);
             Chunks.RemoveAt(indx);
+        }
+        if(safeChunk.activeSelf && safeChunk != null)
+        {
+            Vector3 pos = safeChunk.transform.position;
+            pos.z -= movement;
+            safeChunk.transform.position = pos;
+            if (pos.z < -60)
+            {
+               safeChunk.SetActive(false);
+            }
         }
         for (int i = 0; i < loadedChunks.Count; ++i)
         {
