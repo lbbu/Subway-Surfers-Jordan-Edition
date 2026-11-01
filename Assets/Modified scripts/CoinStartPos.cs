@@ -18,6 +18,11 @@ public class CoinStartPos : MonoBehaviour
         SpawnCoins();
     }
 
+    public void RegisterCoinSpawner()
+    {
+
+    }
+
     public void SpawnCoins()
     {
         ChunkManager.instance.RentCoins(transform, coinStyle, coinCount, archLength, archHeight);

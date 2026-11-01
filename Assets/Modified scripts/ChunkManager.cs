@@ -53,7 +53,7 @@ public class ChunkManager : MonoBehaviour
             {
                 loadedChunks.Add(obj);
                 obj.SetActive(true);
-                obj.transform.position = new Vector3(0, 0, 30);
+                obj.transform.position = new Vector3(0, 0, safeChunk.transform.position.z + 30);
                 Chunks.RemoveAt(indx);                
             }            
         }
@@ -61,10 +61,11 @@ public class ChunkManager : MonoBehaviour
 
     private void FixedUpdate()
     {
+        
         chunksSpeed += accelarate * Time.deltaTime;
         float movement = chunksSpeed * Time.fixedDeltaTime;
 
-        Debug.Log($" Chunk Add to score {movement}");
+        //Debug.Log($" Chunk Add to score {movement}");
         ScoreManagerModified.instance.UpdateScore(Mathf.RoundToInt(movement * 10));
 
         if (loadedChunks.Count < activeChunk + 1)
@@ -95,7 +96,7 @@ public class ChunkManager : MonoBehaviour
         {
             Vector3 pos = loadedChunks[i].transform.position;
             pos.z -= movement;
-            loadedChunks[i].transform.position = pos;
+            loadedChunks[i].GetComponent<Rigidbody>().MovePosition(pos);
             if (pos.z < -60)
             {
                 GameObject obj = loadedChunks[i];

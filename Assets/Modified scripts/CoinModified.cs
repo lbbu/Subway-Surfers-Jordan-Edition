@@ -11,7 +11,10 @@ public class CoinModified : MonoBehaviour
             ChunkManager.instance.ReturnCoin(gameObject);
 
         
-            
+            if(ScoreManagerModified.instance != null)
+            {
+                ScoreManagerModified.instance.AddBonusScore(10);
+            }
         }
     }
 }
