@@ -26,7 +26,9 @@ public class JumpModified : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
-
+        CalculateGravityAndJumpVelocity();
+        ChunkManager.instance.jumpHieght = jumpHeight;
+        ChunkManager.instance.gravity = Mathf.Abs(gravity);
         if (!playerAnimator)
             playerAnimator = GetComponent<Animator>();
         rb.useGravity = false; // إيقاف جاذبية يونيتي لمنع التعارض
@@ -34,9 +36,10 @@ public class JumpModified : MonoBehaviour
 
     private void Start()
     {
-        CalculateGravityAndJumpVelocity();
+        
 
         Swipe.Instance.OnSwipeUp += HandleSwipeUp;
+
 
     }
 
@@ -44,11 +47,6 @@ public class JumpModified : MonoBehaviour
     {
         //Debug.Log($"[HandleSwipeUp] Event Swipe UP Recived!");
         jumpRequested = true;
-    }
-
-    private void Update()
-    {
-
     }
 
     private void FixedUpdate()

@@ -23,7 +23,11 @@ public class ChunkManager : MonoBehaviour
     public List<GameObject> loadedChunks = new();
     public GameObject safeChunk;
     public int activeChunk = 5;
+
     public float chunksSpeed = 10.0f;
+    public float jumpHieght = 0f;
+    public float gravity = 0f;
+
     public float accelarate = 0.1f;
     public float chunkOffset = 30f;
     private void Start()
@@ -55,7 +59,8 @@ public class ChunkManager : MonoBehaviour
                 obj.SetActive(true);
                 obj.transform.position = new Vector3(0, 0, safeChunk.transform.position.z + 30);
                 Chunks.RemoveAt(indx);                
-            }            
+            }
+            obj.GetComponent<ChunkParent>().ActivateChunk();
         }
     }
 
@@ -80,6 +85,7 @@ public class ChunkManager : MonoBehaviour
             loadedChunks.Add(obj);
             obj.SetActive(true);
             obj.transform.position = new Vector3 (lastActiveChPos.x, lastActiveChPos.y, lastActiveChPos.z + chunkOffset);
+            obj.GetComponent<ChunkParent>().ActivateChunk();
             Chunks.RemoveAt(indx);
         }
         if(safeChunk.activeSelf && safeChunk != null)
@@ -101,6 +107,7 @@ public class ChunkManager : MonoBehaviour
             {
                 GameObject obj = loadedChunks[i];
                 loadedChunks.RemoveAt(i);
+                obj.GetComponent<ChunkParent>().HideChunk();
                 obj.SetActive(false);
                 Chunks.Add(obj);
             }
@@ -135,18 +142,18 @@ public class ChunkManager : MonoBehaviour
         }
     }
 
-    public void RentCoins(Transform owner, CoinStyle style, int count, float archLength, float archHeight)
+    public void RentCoins(Transform owner, CoinStyle style, int count)
     {
         if (rentedBy.ContainsKey(owner))
             ReturnCoins(owner);
 
         List<GameObject> rented = new(count);
-
+        count += Mathf.RoundToInt(chunksSpeed / 2f);
         for (int i = 0; i < count; i++)
         {
             GameObject coin = GetCoinFromPool();
             coin.transform.SetParent(owner, false);
-            coin.transform.localPosition = GetOffset(style, i, count, archLength, archHeight);
+            coin.transform.localPosition = GetOffset(style, i, count);
             coin.SetActive(true);
 
             activeCoins.Add(coin);
@@ -204,21 +211,29 @@ public class ChunkManager : MonoBehaviour
         return Instantiate(coinPrefab, coinParent);
     }
 
-    private Vector3 GetOffset(CoinStyle style, int index, int count, float archLength, float archHeight)
+    private Vector3 GetOffset(CoinStyle style, int index, int count)
     {
         switch (style)
         {
             case CoinStyle.Arch:
                 {
-                    
+                    float g = Mathf.Abs(gravity);
+                    if (g < 0.01f || jumpHieght <= 0f)
+                        return new Vector3(0f, 0f, index * coinSpacing);
+
+                    float airTime = 2f * Mathf.Sqrt(2f * jumpHieght / g);
                     float t = count > 1 ? index / (float)(count - 1) : 0f;
-                    float z = t * archLength;
-                    float y = Mathf.Sin(t * Mathf.PI) * archHeight;
+                    float time = t * airTime;
+                    //Debug.Log($"Jump Height {jumpHieght}");
+                    
+                    float v0 = Mathf.Sqrt(2f * g * jumpHieght);
+                    float z = chunksSpeed * time;
+                    float y = v0 * time - 0.5f * g * time * time;
+
                     return new Vector3(0f, y, z);
                 }
-            default: 
+            default:
                 {
-                   
                     float z = index * coinSpacing;
                     return new Vector3(0f, 0f, z);
                 }

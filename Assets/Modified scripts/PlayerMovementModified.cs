@@ -79,7 +79,7 @@ public class PlayerMovementModified : MonoBehaviour
     {
         particle.SetActive(false);
         isAllowToMove = true;
-
+        isSliding = false;
         // الاشتراك في أحداث السحب (Swipes) من سكريبت إدارة اللمس
         if (Swipe.Instance != null)
         {
@@ -215,7 +215,10 @@ public class PlayerMovementModified : MonoBehaviour
     {
         if (!isAllowToMove) return;
         if (stubmle) return;
+
         int targetLane = Mathf.Clamp(currentLane + direction, 0, laneX.Length - 1);
+        if (targetLane == currentLane) return;
+
         float laneGap = Mathf.Abs(laneX[targetLane] - laneX[currentLane]);
         laneTween?.Kill();
         Vector3 rayDic = direction == 1 ? Vector3.right : Vector3.left;
@@ -242,9 +245,9 @@ public class PlayerMovementModified : MonoBehaviour
                 float outTime = Mathf.Abs(targetX - startX) / speed;
                 float backTime = Mathf.Abs(homeX - targetX) / speed;
                 Debug.Log($"Hit {hit.collider.gameObject.name} laneGap = {laneGap} distance {hit.distance} outTime = {outTime} backTime {backTime}");
+                seq.SetUpdate(UpdateType.Fixed);
                 seq.Append(rb.DOMoveX(targetX, outTime)
-                              .SetEase(Ease.OutQuad)
-                              .SetUpdate(UpdateType.Fixed));
+                              .SetEase(Ease.OutQuad));
                 seq.AppendCallback(() =>
                 {
                     Debug.Log("Bumping");
@@ -259,8 +262,7 @@ public class PlayerMovementModified : MonoBehaviour
                 else
                 {
                     seq.Append(rb.DOMoveX(homeX, backTime)
-                                 .SetEase(Ease.OutQuad)
-                                 .SetUpdate(UpdateType.Fixed))
+                                 .SetEase(Ease.OutQuad))
                        .OnComplete(() => stubmle = false);
                     
                 }
@@ -269,14 +271,21 @@ public class PlayerMovementModified : MonoBehaviour
         }
         else
         {
-            if (targetLane == currentLane) return;
+            
 
             currentLane = targetLane;
             //قتل التويين الحيوان لابعاد البقز
 
             laneTween = rb.DOMoveX(laneX[currentLane], laneChangeDuration)
-                          .SetEase(Ease.OutQuad)
-                          .SetUpdate(UpdateType.Fixed);
+              .SetEase(Ease.OutQuad)
+              .SetUpdate(UpdateType.Fixed)
+              .OnComplete(() =>
+              {
+                  var p = rb.position;
+                  rb.position = new Vector3(laneX[currentLane], p.y, p.z);
+                  var v = rb.linearVelocity;
+                  rb.linearVelocity = new Vector3(0f, v.y, v.z);
+              });
         }
 
     }
