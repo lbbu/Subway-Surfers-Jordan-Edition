@@ -3,6 +3,8 @@ using TMPro;
 using System.Collections;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Unity.VisualScripting;
+using UnityEngine.UIElements;
 
 public class ManagerUi : MonoBehaviour
 {
@@ -19,7 +21,19 @@ private bool isloading=false;
  
     StartCoroutine(fadetext());
    }
-  
+public void ShowPanels(GameObject gameObject)
+{
+       Debug.Log("Panel name: " + gameObject.name);
+    Trastion.instance.ShowPanel(gameObject);
+
+
+}
+public void hidpanel()
+    {
+        Trastion.instance.Exit();
+    }
+
+
 
      IEnumerator fadetext()
     {
@@ -45,4 +59,5 @@ private bool isloading=false;
     }
         }
     }
+    
 }

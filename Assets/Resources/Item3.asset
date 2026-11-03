@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Item3
   m_EditorClassIdentifier: Assembly-CSharp::Item
   itemName: item3
-  itemID: 
+  itemIDName: thir
   itemImage: {fileID: 0}
   itemPrefab: {fileID: 0}
   itemPrice: 500

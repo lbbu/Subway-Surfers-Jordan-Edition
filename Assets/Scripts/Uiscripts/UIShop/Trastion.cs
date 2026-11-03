@@ -1,43 +1,76 @@
 using UnityEngine;
+using System.Collections.Generic;
+using DG.Tweening;
 
 public class Trastion : MonoBehaviour
 {
-[SerializeField] private RectTransform rectTransform;
-   [SerializeField] private Vector2 hiddenPanelLocker = new Vector2(0, 800);
-   private Character instace;
-   
-   
- private Vector2 showPanelLocker;
-  bool isOpen=false;
+    public static Trastion instance;
 
-    void Start()
+    Dictionary<GameObject, Vector2> PanelDic = new();
+    [SerializeField] private List<GameObject> panels = new();
+    [SerializeField] private GameObject ActivePanel;
+    private float duration=0.5f;
+
+    public RectTransform rectTransform;
+
+    private Vector3 showpanel = new Vector2(0, 0);
+    private Vector2 hiddenpanel;
+
+
+    private void Awake()
     {
-       instace=GetComponent<Character>();
-       
-       
-        showPanelLocker = rectTransform.anchoredPosition;
-        rectTransform.anchoredPosition = hiddenPanelLocker;
-    }
-
-    public void TogglePanelLocker()
-    {
-        if (!isOpen)
-        {
-            LeanTween.move(rectTransform, showPanelLocker, 0.4f)
-                .setEase(LeanTweenType.easeOutBounce);
-
-     
-        }
+        if (instance == null)
+            instance = this;
         else
         {
-            LeanTween.move(rectTransform, hiddenPanelLocker, 0.4f)
-                .setEase(LeanTweenType.easeInOutQuad);
+            Destroy(gameObject);
+            return;
         }
 
-   isOpen=!isOpen;
+        for (int i = 0; i < panels.Count; i++)
+        {
+            if (!PanelDic.ContainsKey(panels[i]))
+            {
+                RectTransform rect = panels[i].GetComponent<RectTransform>();
+                PanelDic[panels[i]] = rect.anchoredPosition;
+              
+            }
+        }
+        
     }
-    public void rowchangcharacter()
+
+
+
+    
+public void ShowPanel(GameObject gameObject)
+{
+    
+    if (!PanelDic.ContainsKey(gameObject))
+        return;
+
+    if (ActivePanel != null && ActivePanel != gameObject)
     {
-        instace.ChangeCharacter(1);
+        LeanTween.cancel(ActivePanel);
+        ActivePanel.SetActive(false);
     }
+
+
+    ActivePanel = gameObject;
+    ActivePanel.SetActive(true);
+
+    RectTransform rect = gameObject.GetComponent<RectTransform>();
+    rect.DOLocalMove(showpanel,duration).SetEase(Ease.OutBack);
+
+   
+}
+public void Exit()
+{
+    if (ActivePanel != null)
+    {
+        ActivePanel.transform.localPosition=PanelDic[ActivePanel];
+        ActivePanel.SetActive(false);
+        ActivePanel = null;
+    
+    }
+}
 }
