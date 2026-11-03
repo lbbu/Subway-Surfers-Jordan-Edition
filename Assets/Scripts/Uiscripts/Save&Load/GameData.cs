@@ -10,6 +10,6 @@ public class GameData
     public GameData()
     {
        
-        this.coins = 0;
+        this.coins = 1000;
     }
 }
