@@ -50,4 +50,8 @@ public class CameraShakeManager : MonoBehaviour
     {
         cam.GetComponent<CinemachineFollowZoom>().Width = 3;
     }
+    public void ReviveCamera()
+    {
+        cam.GetComponent<CinemachineFollowZoom>().Width = 9;
+    }
 }

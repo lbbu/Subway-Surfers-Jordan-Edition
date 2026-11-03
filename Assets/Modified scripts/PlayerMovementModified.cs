@@ -43,6 +43,8 @@ public class PlayerMovementModified : MonoBehaviour
     // تم جعله public static لكي تتمكن من قراءته في سكريبت القفز إذا احتجت لذلك
     public static bool isSliding = false;
 
+    [Header("Idle")]
+    [SerializeField] private bool startInIdle = true;
 
     // متغيرات لحفظ أبعاد المصادم الأصلية لاسترجاعها بعد التزحلق
     private float originalColliderHeight;
@@ -72,13 +74,15 @@ public class PlayerMovementModified : MonoBehaviour
         boneBodies = System.Array.FindAll(GetComponentsInChildren<Rigidbody>(), r => r != rb);
         boneColliders = System.Array.FindAll(GetComponentsInChildren<Collider>(), c => c != playerCollider);
 
+        idleBlendHash = Animator.StringToHash(idleBlendParameter);
+
         SetRagdoll(false);
     }
 
     void Start()
     {
         particle.SetActive(false);
-        isAllowToMove = true;
+        isAllowToMove = !startInIdle;
         isSliding = false;
         // الاشتراك في أحداث السحب (Swipes) من سكريبت إدارة اللمس
         if (Swipe.Instance != null)
@@ -88,6 +92,9 @@ public class PlayerMovementModified : MonoBehaviour
             Swipe.Instance.OnSwipeRight += HandleSwipeRight;
         }
     }
+
+
+   
 
     private void OnDestroy()
     {
@@ -138,7 +145,7 @@ public class PlayerMovementModified : MonoBehaviour
     bool SideCast(Vector3 dir, float dist, out RaycastHit hit)
     {
         Vector3 basePos = rb.position;
-        float h = playerCollider.height; 
+        float h = playerCollider.height;
 
         Vector3 bottom = basePos + Vector3.up * (sideStepHeight + sideRadius);
         Vector3 top = basePos + Vector3.up * Mathf.Max(h - sideRadius, sideStepHeight + sideRadius);
@@ -148,7 +155,7 @@ public class PlayerMovementModified : MonoBehaviour
     }
     bool OnSideHit()
     {
-        if (IsStumbling) {  return true; }
+        if (IsStumbling) { return true; }
         stumbleTimer = stumbleWindow;
         playerAnimator.SetTrigger("Stumble");
         return false;
@@ -173,7 +180,47 @@ public class PlayerMovementModified : MonoBehaviour
 
         ChunkManager.instance.chunksSpeed = 0f;
         ChunkManager.instance.accelarate = 0f;
+        ChunkManager.instance.startGame = false;
         particle.SetActive(true);
+
+    }
+    public void Revive()
+    {
+        ChunkManager.instance.chunksSpeed = 0f;
+        ChunkManager.instance.accelarate = 0f;
+
+        SetRagdoll(false);
+        playerAnimator.enabled = true;
+        GetComponent<CapsuleCollider>().enabled = true;
+        GetComponent<Rigidbody>().isKinematic = false;
+
+        CancelSlide();
+        isSliding = false;
+        isAllowToMove = false;
+
+        playerAnimator.ResetTrigger("Slide");
+        playerAnimator.ResetTrigger("Jump");
+        playerAnimator.ResetTrigger("Run");
+
+        UpdateIdleRandomizer();
+        playerAnimator.SetTrigger("Idle");
+
+        CameraShakeManager.instance.ReviveCamera();
+        particle.SetActive(false);
+    }
+
+    public void NewRun()
+    {
+        if (isAllowToMove) return;
+        Debug.Log("[Idle] NewRun called, idle randomizer stopped");
+        isSliding = false;
+        isAllowToMove = true;
+        SetRagdoll(false);
+        playerAnimator.ResetTrigger("Slide");
+        playerAnimator.ResetTrigger("Jump");
+        playerAnimator.ResetTrigger("Idle");
+        playerAnimator.SetTrigger("Run");
+        ChunkManager.instance.MoveChunks();
 
     }
     void SetRagdoll(bool on)
@@ -256,7 +303,7 @@ public class PlayerMovementModified : MonoBehaviour
 
                 if (fatal)
                 {
-                    
+
                     seq.OnComplete(Die);
                 }
                 else
@@ -264,14 +311,14 @@ public class PlayerMovementModified : MonoBehaviour
                     seq.Append(rb.DOMoveX(homeX, backTime)
                                  .SetEase(Ease.OutQuad))
                        .OnComplete(() => stubmle = false);
-                    
+
                 }
 
             }
         }
         else
         {
-            
+
 
             currentLane = targetLane;
             //قتل التويين الحيوان لابعاد البقز
@@ -327,17 +374,35 @@ public class PlayerMovementModified : MonoBehaviour
     //}
 
     #endregion
-
+    Coroutine slideRoutine;
     private void HandleSwipeDown(object sender, EventArgs e)
     {
         // منع التزحلق إذا كان اللاعب يتزحلق مسبقاً أو غير مسموح له بالحركة
         if (!isAllowToMove || isSliding) return;
 
-        StartCoroutine(SlideDown());
+        slideRoutine = StartCoroutine(SlideDown());
     }
+    void CancelSlide()
+    {
+        if (slideRoutine != null)
+        {
+            StopCoroutine(slideRoutine);
+            slideRoutine = null;
+        }
 
+        rb.DOKill();   // stop the DOMoveY fall tween from the slide
+        isSliding = false;
+
+        if (playerCollider != null)
+        {
+            playerCollider.height = originalColliderHeight;
+            playerCollider.center = originalColliderCenter;
+        }
+    }
     void Update()
     {
+        UpdateIdleRandomizer();
+
         if (!isAllowToMove) { return; }
 
         // نظام حماية (Failsafe): إذا سقط اللاعب تحت الخريطة يتم إعادته للسطح
@@ -410,6 +475,97 @@ public class PlayerMovementModified : MonoBehaviour
             playerCollider.center = originalColliderCenter;
         }
     }
+    #region Idle Randomization
+    [Header("Idle Randomization")]
+    public bool idleActive = true;
+    [SerializeField] private string idleStateName = "Idle";
+    [SerializeField] private string idleBlendParameter = "IdleBlend";
+    [SerializeField] private int idleVariantCount = 3;
+    [SerializeField] private int minIdleLoops = 1;
+    [SerializeField] private int maxIdleLoops = 3;
+    [SerializeField] private bool avoidRepeatIdle = true;
+
+    private int idleBlendHash;
+    private int currentIdleIndex = -1;
+    private int idleLoopsLeft;
+    private int lastIdleLoop;
+    private bool wasInIdle;
+
+
+    void UpdateIdleRandomizer()
+    {
+        if (Time.frameCount % 60 == 0 && playerAnimator != null)
+        {
+            AnimatorStateInfo d = playerAnimator.GetCurrentAnimatorStateInfo(0);
+            Debug.Log($"[Idle] DIAG idleActive={idleActive}, animEnabled={playerAnimator.enabled}, " +
+                      $"IsName(\"{idleStateName}\")={d.IsName(idleStateName)}, " +
+                      $"stateHash={d.shortNameHash}, expectedHash={Animator.StringToHash(idleStateName)}, " +
+                      $"clips={playerAnimator.GetCurrentAnimatorClipInfo(0).Length}");
+        }
+        var clip = playerAnimator.GetCurrentAnimatorClipInfo(0);
+        Debug.Log($"[Idle] Playing clip: {(clip.Length > 0 ? clip[0].clip.name : "none")}");
+        if (!idleActive) return;
+
+        if (playerAnimator == null)
+        {
+            Debug.LogWarning("[Idle] playerAnimator is null");
+            return;
+        }
+
+        if (!playerAnimator.enabled) return;
+
+        AnimatorStateInfo info = playerAnimator.GetCurrentAnimatorStateInfo(0);
+
+        // Not in Idle (running, sliding...): reset so we pick fresh on the next entry
+        if (!info.IsName(idleStateName))
+        {
+            if (wasInIdle)
+                Debug.Log($"[Idle] Left Idle state (idleStateName = \"{idleStateName}\")");
+
+            wasInIdle = false;
+            return;
+        }
+
+        // Just entered Idle: pick a random clip
+        if (!wasInIdle)
+        {
+            Debug.Log($"[Idle] Entered Idle state \"{idleStateName}\"");
+            wasInIdle = true;
+            lastIdleLoop = 0;
+            PickNewIdle();
+            return;
+        }
+
+        // Count finished loops, then switch exactly at the loop boundary
+        int loop = Mathf.FloorToInt(info.normalizedTime);
+        if (loop <= lastIdleLoop) return;
+
+        lastIdleLoop = loop;
+        idleLoopsLeft--;
+        Debug.Log($"[Idle] Loop {loop} finished, loops left: {idleLoopsLeft}");
+
+        if (idleLoopsLeft <= 0)
+            PickNewIdle();
+    }
+
+    void PickNewIdle()
+    {
+        int next = UnityEngine.Random.Range(0, idleVariantCount);
+
+        if (avoidRepeatIdle && idleVariantCount > 1 && currentIdleIndex >= 0)
+        {
+            while (next == currentIdleIndex)
+                next = UnityEngine.Random.Range(0, idleVariantCount);
+        }
+
+        int previous = currentIdleIndex;
+        currentIdleIndex = next;
+        idleLoopsLeft = UnityEngine.Random.Range(minIdleLoops, maxIdleLoops + 1);
+
+        playerAnimator.SetFloat(idleBlendHash, currentIdleIndex);
+        Debug.Log($"[Idle] Picked variant {currentIdleIndex} (previous: {previous}), will play {idleLoopsLeft} loop(s)");
+    }
+    #endregion
 
     // Claude Debug for side colliders
     void GetSideCapsule(Vector3 basePos, out Vector3 bottom, out Vector3 top)
@@ -466,4 +622,6 @@ public class PlayerMovementModified : MonoBehaviour
     //        }
     //    }
     //}
+
+
 }
