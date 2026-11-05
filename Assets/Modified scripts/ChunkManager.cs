@@ -73,6 +73,9 @@ public class ChunkManager : MonoBehaviour
         LoadStartingChunks();
         GameManager.instance.HideDeathMenu();
         GameManager.instance.ShowMainMenu();
+
+        ScoreManagerModified.instance.NewGame();
+        ScoreManagerModified.instance.currentScore.gameObject.SetActive(false);
     }
 
     private void LoadStartingChunks()

@@ -225,6 +225,8 @@ public class PlayerMovementModified : MonoBehaviour
         playerAnimator.SetTrigger("Run");
         ChunkManager.instance.MoveChunks();
 
+
+        ScoreManagerModified.instance.currentScore.gameObject.SetActive(true);
         GameManager.instance.HideMainMenu();
     }
     void SetRagdoll(bool on)
