@@ -44,6 +44,9 @@ public class ChunkManager : MonoBehaviour
         {
             LoadStartingChunks();
         }
+
+        GameManager.instance.HideDeathMenu();
+        GameManager.instance.ShowMainMenu();
     }
     public void MoveChunks()
     {
@@ -68,6 +71,8 @@ public class ChunkManager : MonoBehaviour
         }
         loadedChunks.Clear();
         LoadStartingChunks();
+        GameManager.instance.HideDeathMenu();
+        GameManager.instance.ShowMainMenu();
     }
 
     private void LoadStartingChunks()

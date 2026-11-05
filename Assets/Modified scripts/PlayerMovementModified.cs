@@ -75,7 +75,7 @@ public class PlayerMovementModified : MonoBehaviour
         boneColliders = System.Array.FindAll(GetComponentsInChildren<Collider>(), c => c != playerCollider);
 
         idleBlendHash = Animator.StringToHash(idleBlendParameter);
-
+        idleStateHash = Animator.StringToHash(idleStateName);
         SetRagdoll(false);
     }
 
@@ -183,7 +183,10 @@ public class PlayerMovementModified : MonoBehaviour
         ChunkManager.instance.startGame = false;
         particle.SetActive(true);
 
+        GameManager.instance.ShowDeathMenu();
+
     }
+
     public void Revive()
     {
         ChunkManager.instance.chunksSpeed = 0f;
@@ -222,6 +225,7 @@ public class PlayerMovementModified : MonoBehaviour
         playerAnimator.SetTrigger("Run");
         ChunkManager.instance.MoveChunks();
 
+        GameManager.instance.HideMainMenu();
     }
     void SetRagdoll(bool on)
     {
@@ -490,62 +494,43 @@ public class PlayerMovementModified : MonoBehaviour
     private int idleLoopsLeft;
     private int lastIdleLoop;
     private bool wasInIdle;
-
+    private int idleStateHash;
 
     void UpdateIdleRandomizer()
     {
-        if (Time.frameCount % 60 == 0 && playerAnimator != null)
-        {
-            AnimatorStateInfo d = playerAnimator.GetCurrentAnimatorStateInfo(0);
-            Debug.Log($"[Idle] DIAG idleActive={idleActive}, animEnabled={playerAnimator.enabled}, " +
-                      $"IsName(\"{idleStateName}\")={d.IsName(idleStateName)}, " +
-                      $"stateHash={d.shortNameHash}, expectedHash={Animator.StringToHash(idleStateName)}, " +
-                      $"clips={playerAnimator.GetCurrentAnimatorClipInfo(0).Length}");
-        }
-        var clip = playerAnimator.GetCurrentAnimatorClipInfo(0);
-        Debug.Log($"[Idle] Playing clip: {(clip.Length > 0 ? clip[0].clip.name : "none")}");
-        if (!idleActive) return;
-
-        if (playerAnimator == null)
-        {
-            Debug.LogWarning("[Idle] playerAnimator is null");
-            return;
-        }
-
-        if (!playerAnimator.enabled) return;
+        if (!idleActive || playerAnimator == null || !playerAnimator.enabled) return;
 
         AnimatorStateInfo info = playerAnimator.GetCurrentAnimatorStateInfo(0);
 
-        // Not in Idle (running, sliding...): reset so we pick fresh on the next entry
         if (!info.IsName(idleStateName))
         {
-            if (wasInIdle)
-                Debug.Log($"[Idle] Left Idle state (idleStateName = \"{idleStateName}\")");
-
             wasInIdle = false;
             return;
         }
 
-        // Just entered Idle: pick a random clip
+        if (playerAnimator.IsInTransition(0)) return;
+
         if (!wasInIdle)
         {
-            Debug.Log($"[Idle] Entered Idle state \"{idleStateName}\"");
             wasInIdle = true;
-            lastIdleLoop = 0;
             PickNewIdle();
             return;
         }
 
-        // Count finished loops, then switch exactly at the loop boundary
-        int loop = Mathf.FloorToInt(info.normalizedTime);
-        if (loop <= lastIdleLoop) return;
+        if (info.normalizedTime < 1f) return;
 
-        lastIdleLoop = loop;
         idleLoopsLeft--;
-        Debug.Log($"[Idle] Loop {loop} finished, loops left: {idleLoopsLeft}");
 
         if (idleLoopsLeft <= 0)
-            PickNewIdle();
+            PickNewIdle();     
+        else
+            RestartIdle();      
+    }
+
+    void RestartIdle()
+    {
+        playerAnimator.Play(idleStateHash, 0, 0f);
+        playerAnimator.Update(0f);   
     }
 
     void PickNewIdle()
@@ -554,16 +539,18 @@ public class PlayerMovementModified : MonoBehaviour
 
         if (avoidRepeatIdle && idleVariantCount > 1 && currentIdleIndex >= 0)
         {
-            while (next == currentIdleIndex)
-                next = UnityEngine.Random.Range(0, idleVariantCount);
+            next = UnityEngine.Random.Range(0, idleVariantCount - 1);
+            if (next >= currentIdleIndex) next++;
         }
 
-        int previous = currentIdleIndex;
         currentIdleIndex = next;
         idleLoopsLeft = UnityEngine.Random.Range(minIdleLoops, maxIdleLoops + 1);
 
-        playerAnimator.SetFloat(idleBlendHash, currentIdleIndex);
-        Debug.Log($"[Idle] Picked variant {currentIdleIndex} (previous: {previous}), will play {idleLoopsLeft} loop(s)");
+        float blendValue = idleVariantCount > 1 ? currentIdleIndex / (float)(idleVariantCount - 1) : 0f;
+        playerAnimator.SetFloat(idleBlendHash, blendValue);
+        RestartIdle();
+
+        Debug.Log($"[Idle] Variant {currentIdleIndex}, {idleLoopsLeft} pass(es)");
     }
     #endregion
 
