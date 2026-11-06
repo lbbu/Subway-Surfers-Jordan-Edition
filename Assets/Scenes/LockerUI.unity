@@ -454,7 +454,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.81625, y: 0.85310936}
   m_AnchorMax: {x: 0.81625, y: 0.85310936}
-  m_AnchoredPosition: {x: 0, y: 0.000061035156}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 267.8173, y: 97.8987}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &132576013
@@ -894,7 +894,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 344596732}
-  - component: {fileID: 344596731}
   m_Layer: 0
   m_Name: coin
   m_TagString: Untagged
@@ -902,19 +901,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &344596731
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 344596730}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2db560d98df6b0b458b3a76730a4b03c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::coins
-  coinText: {fileID: 0}
 --- !u!4 &344596732
 Transform:
   m_ObjectHideFlags: 0
@@ -1667,7 +1653,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1841566066}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: Trastion, Assembly-CSharp
         m_MethodName: TogglePanelLocker
         m_Mode: 1
@@ -3040,6 +3026,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ManagerGame
   fileName: data.game
+  gamedata:
+    coins: 0
 --- !u!1 &1756754771
 GameObject:
   m_ObjectHideFlags: 0
@@ -3217,7 +3205,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1841566067}
-  - component: {fileID: 1841566066}
   - component: {fileID: 1841566068}
   m_Layer: 0
   m_Name: Managertranstion
@@ -3226,20 +3213,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1841566066
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1841566065}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 62f52805851a19e498c53712a3002b13, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Trastion
-  rectTransform: {fileID: 59196346}
-  hiddenPanelLocker: {x: 0, y: 1500}
 --- !u!4 &1841566067
 Transform:
   m_ObjectHideFlags: 0
@@ -3279,7 +3252,7 @@ MonoBehaviour:
   - p3
   - p4
   characterContainer: {fileID: 969009782}
-  playerCoins: {fileID: 344596731}
+  playerCoins: {fileID: 0}
   currentCharacter: 0
 --- !u!1 &1854207636
 GameObject:

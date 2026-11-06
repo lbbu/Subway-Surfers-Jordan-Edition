@@ -2,6 +2,7 @@
 using UnityEngine;
 using TMPro;
 using Unity.VisualScripting;
+using System.Globalization;
 
 public class coins : MonoBehaviour, IGameData
 {
@@ -17,12 +18,19 @@ public class coins : MonoBehaviour, IGameData
             instance=this;
         }
     }
+  
 public void addcoin()
-    {
-        numofcoins++;
-        Debug.Log($"coins={numofcoins}");
+{
+    numofcoins++;
 
-           }
+    if (coinText != null)
+    {
+        coinText.text = numofcoins.ToString();
+    }
+ 
+
+   
+}
 
     public int GetCoins()
     {
@@ -46,19 +54,21 @@ public void addcoin()
         return true;
     }
 
-    public void LoadData(GameData data)
-    {
-        numofcoins = data.coins;
+public void LoadData(GameData data)
+{
+    numofcoins = data.coins;
 
-        if (coinText != null)
-        {
-            coinText.text = numofcoins.ToString();
-        }
+    if (coinText != null)
+    {
+        coinText.text = numofcoins.ToString();
     }
+   
+}
 
     public void SaveData(ref GameData data)
     {
 
         data.coins = numofcoins;
+      
     }
 }

@@ -18,30 +18,79 @@ public class ChunkManager : MonoBehaviour
             Destroy(gameObject);
         }
     }
-
+    public bool startGame = false;
     public List<GameObject> Chunks = new();
     public List<GameObject> loadedChunks = new();
     public GameObject safeChunk;
     public int activeChunk = 5;
+
     public float chunksSpeed = 10.0f;
+    public float jumpHieght = 0f;
+    public float gravity = 0f;
+
     public float accelarate = 0.1f;
     public float chunkOffset = 30f;
+
+    private float localChunkSpd = 0f;
+    private float localAccelerate = 0f;
+
+    public GameObject player;
     private void Start()
     {
-        if(loadedChunks.Count <= 0)
+        localChunkSpd = chunksSpeed;
+        localAccelerate = accelarate;
+
+        if (loadedChunks.Count <= 0)
         {
             LoadStartingChunks();
         }
+
+        GameManager.instance.HideDeathMenu();
+        GameManager.instance.ShowMainMenu();
+    }
+    public void MoveChunks()
+    {
+        chunksSpeed = localChunkSpd;
+        accelarate = localAccelerate;
+        startGame = true;
+    }
+
+    public void NewRun()
+    {
+        player.transform.position = Vector3.zero;
+        player.GetComponent<PlayerMovementModified>().Revive();
+        for (int i = 0; i < loadedChunks.Count; i++)
+        {
+            Debug.Log($"Loaded chunks count {loadedChunks.Count} Chunks Count {Chunks.Count}");
+            GameObject obj = loadedChunks[i];
+            
+            obj.GetComponent<ChunkParent>().HideChunk();
+            obj.SetActive(false);
+            Chunks.Add(obj);
+            Debug.Log($" New! Loaded chunks count {loadedChunks.Count} Chunks Count {Chunks.Count}");
+        }
+        loadedChunks.Clear();
+        LoadStartingChunks();
+        GameManager.instance.HideDeathMenu();
+        GameManager.instance.ShowMainMenu();
+
+        ScoreManagerModified.instance.NewGame();
+        ScoreManagerModified.instance.currentScore.gameObject.SetActive(false);
     }
 
     private void LoadStartingChunks()
     {
+        safeChunk.SetActive(true);
+        safeChunk.transform.position = new Vector3(0, 0, 20);
+
+
+
         for (int i = 0; i < activeChunk + 1; i++)
         {
             int indx = Random.Range(0, Chunks.Count - 1);
             Debug.Log($"{indx}");
             GameObject obj = Chunks[indx];
-            if(loadedChunks.Count > 0)
+            if (loadedChunks.Count > 0)
             {
                 Vector3 lastActiveChPos = loadedChunks[loadedChunks.Count - 1].transform.position;
                 loadedChunks.Add(obj);
@@ -53,18 +102,21 @@ public class ChunkManager : MonoBehaviour
             {
                 loadedChunks.Add(obj);
                 obj.SetActive(true);
-                obj.transform.position = new Vector3(0, 0, 30);
-                Chunks.RemoveAt(indx);                
-            }            
+                obj.transform.position = new Vector3(0, 0, safeChunk.transform.position.z + 30);
+                Chunks.RemoveAt(indx);
+            }
+            obj.GetComponent<ChunkParent>().ActivateChunk();
         }
     }
 
     private void FixedUpdate()
     {
+        if (!startGame) return;
+
         chunksSpeed += accelarate * Time.deltaTime;
         float movement = chunksSpeed * Time.fixedDeltaTime;
 
-        Debug.Log($" Chunk Add to score {movement}");
+        //Debug.Log($" Chunk Add to score {movement}");
         ScoreManagerModified.instance.UpdateScore(Mathf.RoundToInt(movement * 10));
 
         if (loadedChunks.Count < activeChunk + 1)
@@ -74,34 +126,37 @@ public class ChunkManager : MonoBehaviour
             int indx = Random.Range(0, Chunks.Count - 1);
             Debug.Log($"{indx}");
             GameObject obj = Chunks[indx];
-            
+
             Vector3 lastActiveChPos = loadedChunks[loadedChunks.Count - 1].transform.position;
             loadedChunks.Add(obj);
             obj.SetActive(true);
-            obj.transform.position = new Vector3 (lastActiveChPos.x, lastActiveChPos.y, lastActiveChPos.z + chunkOffset);
+            obj.transform.position = new Vector3(lastActiveChPos.x, lastActiveChPos.y, lastActiveChPos.z + chunkOffset);
+            obj.GetComponent<ChunkParent>().ActivateChunk();
             Chunks.RemoveAt(indx);
         }
-        if(safeChunk.activeSelf && safeChunk != null)
+        if (safeChunk.activeSelf && safeChunk != null)
         {
             Vector3 pos = safeChunk.transform.position;
             pos.z -= movement;
             safeChunk.transform.position = pos;
             if (pos.z < -60)
             {
-               safeChunk.SetActive(false);
+                safeChunk.SetActive(false);
             }
         }
-        for (int i = 0; i < loadedChunks.Count; ++i)
+        for (int i = 0; i < loadedChunks.Count; i++)
         {
             Vector3 pos = loadedChunks[i].transform.position;
             pos.z -= movement;
-            loadedChunks[i].transform.position = pos;
+            loadedChunks[i].GetComponent<Rigidbody>().MovePosition(pos);
             if (pos.z < -60)
             {
                 GameObject obj = loadedChunks[i];
-                loadedChunks.RemoveAt(i);
+                
+                obj.GetComponent<ChunkParent>().HideChunk();
                 obj.SetActive(false);
                 Chunks.Add(obj);
+                loadedChunks.RemoveAt(i);
             }
         }
     }
@@ -134,18 +189,18 @@ public class ChunkManager : MonoBehaviour
         }
     }
 
-    public void RentCoins(Transform owner, CoinStyle style, int count, float archLength, float archHeight)
+    public void RentCoins(Transform owner, CoinStyle style, int count)
     {
         if (rentedBy.ContainsKey(owner))
             ReturnCoins(owner);
 
         List<GameObject> rented = new(count);
-
+        count += Mathf.RoundToInt(chunksSpeed / 2f);
         for (int i = 0; i < count; i++)
         {
             GameObject coin = GetCoinFromPool();
             coin.transform.SetParent(owner, false);
-            coin.transform.localPosition = GetOffset(style, i, count, archLength, archHeight);
+            coin.transform.localPosition = GetOffset(style, i, count);
             coin.SetActive(true);
 
             activeCoins.Add(coin);
@@ -203,21 +258,29 @@ public class ChunkManager : MonoBehaviour
         return Instantiate(coinPrefab, coinParent);
     }
 
-    private Vector3 GetOffset(CoinStyle style, int index, int count, float archLength, float archHeight)
+    private Vector3 GetOffset(CoinStyle style, int index, int count)
     {
         switch (style)
         {
             case CoinStyle.Arch:
                 {
-                    
+                    float g = Mathf.Abs(gravity);
+                    if (g < 0.01f || jumpHieght <= 0f)
+                        return new Vector3(0f, 0f, index * coinSpacing);
+
+                    float airTime = 2f * Mathf.Sqrt(2f * jumpHieght / g);
                     float t = count > 1 ? index / (float)(count - 1) : 0f;
-                    float z = t * archLength;
-                    float y = Mathf.Sin(t * Mathf.PI) * archHeight;
+                    float time = t * airTime;
+                    //Debug.Log($"Jump Height {jumpHieght}");
+
+                    float v0 = Mathf.Sqrt(2f * g * jumpHieght);
+                    float z = chunksSpeed * time;
+                    float y = v0 * time - 0.5f * g * time * time;
+
                     return new Vector3(0f, y, z);
                 }
-            default: 
+            default:
                 {
-                   
                     float z = index * coinSpacing;
                     return new Vector3(0f, 0f, z);
                 }

@@ -4,7 +4,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 
-public class FileDatahandle : MonoBehaviour
+public class FileDatahandle 
 {
 public string dataDirPath = "";
     private string dataFileName = "";
