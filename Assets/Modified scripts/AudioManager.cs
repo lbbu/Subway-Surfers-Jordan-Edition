@@ -18,7 +18,8 @@ public class AudioManager : MonoBehaviour
             Destroy(gameObject);
         }
     }
-    public void PlaySound(AudioClip clip) {     
+    public void PlaySound(AudioClip clip)  
+    {     
         float randomPitch = Random.Range(pitchRange.x, pitchRange.y);
         PlayerAudio.pitch = randomPitch;
         PlayerAudio.PlayOneShot(clip);
