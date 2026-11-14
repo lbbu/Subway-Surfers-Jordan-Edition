@@ -9213,6 +9213,60 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 735530755}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &741434593
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 741434595}
+  - component: {fileID: 741434594}
+  m_Layer: 0
+  m_Name: PowerUps
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &741434594
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 741434593}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bdc8f5a732a1f744c9e766e72d85fc8f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
+  nothing: 75
+  powerUps: 25
+  entries:
+  - item: {fileID: 3510405445054150507, guid: 5213eeb24c0563f42a5c9c184edfd4b4, type: 3}
+    weight: 25
+  - item: {fileID: 3962800316355513587, guid: 4c2b480af45f3584c94fe42a9f8ffea9, type: 3}
+    weight: 5
+  - item: {fileID: 7581881176154482817, guid: 3cef665f131ec60448ccc1b831fa0d51, type: 3}
+    weight: 20
+  ActiveObject: {fileID: 0}
+--- !u!4 &741434595
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 741434593}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &757985167 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: -3086436065929644917, guid: c4436dcf4f79954489199cf4c139eb22, type: 3}
@@ -29700,4 +29754,8 @@ SceneRoots:
   - {fileID: 1645065581}
   - {fileID: 358470956}
   - {fileID: 393454929}
+<<<<<<< Updated upstream
   - {fileID: 1161267032}
+=======
+  - {fileID: 741434595}
+>>>>>>> Stashed changes
