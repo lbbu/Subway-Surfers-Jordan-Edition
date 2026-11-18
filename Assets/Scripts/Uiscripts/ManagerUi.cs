@@ -9,10 +9,12 @@ using UnityEngine.UIElements;
 public class ManagerUi : MonoBehaviour
 {
 [SerializeField] private GameObject textplay;
+bool isopen;
+
 
 
 [SerializeField]private TextMeshProUGUI textui;
-private bool isloading=false;
+
   private float duration=2f;
     
 
@@ -21,16 +23,32 @@ private bool isloading=false;
  
     StartCoroutine(fadetext());
    }
-public void ShowPanels(GameObject gameObject)
+public void ShowPanels(GameObject panel)
 {
-       Debug.Log("Panel name: " + gameObject.name);
-    Trastion.instance.ShowPanel(gameObject);
+  
 
+    if (!isopen)
+    {
+        Trastion.instance.ShowPanel(panel);
+       
+    }
+    else
+    {
+       hidpanel();
+       
+    }
+isopen = !isopen;
 
 }
+   
 public void hidpanel()
     {
-        Trastion.instance.Exit();
+       
+        
+          Trastion.instance.Exit();
+      
+        
+     
     }
 
 
