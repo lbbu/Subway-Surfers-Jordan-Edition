@@ -71,6 +71,9 @@ public class ChunkManager : MonoBehaviour
         }
         loadedChunks.Clear();
         LoadStartingChunks();
+
+        BackgroundManager.instance.ResetSpawner();
+
         GameManager.instance.HideDeathMenu();
         GameManager.instance.ShowMainMenu();
 
@@ -159,6 +162,7 @@ public class ChunkManager : MonoBehaviour
                 loadedChunks.RemoveAt(i);
             }
         }
+        BackgroundManager.instance.Move(movement - 0.001f);
     }
 
     #region CreateCoinsForChunks
